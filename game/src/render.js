@@ -50,15 +50,17 @@ export class Renderer {
     this.drawBackdrop(ctx, garden, cam, t);
     this.drawMidrock(ctx, garden, cam, t);
     this.drawMoon(ctx, garden, cam, t);
-    this.drawCave(ctx, garden, cam, t);
+    this.drawCave(ctx, garden, cam, t, game);
+    this.drawShaft(ctx, garden, cam, t);
     this.fillLight(ctx, garden, cam);
-    this.drawFlora(ctx, garden, cam, t);
+    this.drawFlora(ctx, garden, cam, t, game);
     this.drawIslands(ctx, garden, t);
     this.drawPickups(ctx, game);
     this.drawExit(ctx, game);
     for (const bat of game.bats) bat.draw(ctx);
     player.draw(ctx);
     game.particles.draw(ctx);
+    this.drawNearSilhouette(ctx, garden, cam, t);
     ctx.restore();
 
     this.drawLighting(game);
@@ -209,15 +211,19 @@ export class Renderer {
   drawMotes(ctx, garden, cam, t) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 54; i++) {
+    const count = 30;
+    const span = VIEW_W + 400;
+    for (let i = 0; i < count; i++) {
       const seed = i * 97 + garden.seed;
-      const baseX = hash(seed) * (VIEW_W + 400);
+      const baseX = (i * 0.61803398875 + hash(seed) * 0.11) % 1;
       const baseY = 90 + hash(seed + 3) * 540;
       const par = 0.25 + hash(seed + 7) * 0.5;
-      const x = ((baseX - cam.x * par + Math.sin(t * 0.14 + i) * 26) % (VIEW_W + 400) + VIEW_W + 400) % (VIEW_W + 400) - 200;
-      const y = baseY + Math.sin(t * 0.22 + i * 1.7) * 16;
-      const a = 0.1 + hash(seed + 11) * 0.25;
-      const rr = 0.7 + hash(seed + 13) * 1.6;
+      const x = ((baseX * span - cam.x * par + Math.sin(t * 0.14 + i) * 22) % span + span) % span - 200;
+      const y = baseY + Math.sin(t * 0.22 + i * 1.7) * 14;
+      // Keep the central title and start-prompt area clear of stray glows.
+      if (x > VIEW_W / 2 - 220 && x < VIEW_W / 2 + 220 && y > 300 && y < VIEW_H) continue;
+      const a = (0.1 + hash(seed + 11) * 0.25) * 0.55;
+      const rr = (0.7 + hash(seed + 13) * 1.6) * 0.55;
       ctx.fillStyle = `rgba(220,250,240,${a})`;
       ctx.beginPath();
       ctx.arc(x, y, rr, 0, TAU);
@@ -280,7 +286,7 @@ export class Renderer {
 
   // The play field walls: solid rock, strata, speckles, stalactites and a lit
   // rim. This is the layer the lantern is supposed to reveal.
-  drawCave(ctx, garden, cam, t) {
+  drawCave(ctx, garden, cam, t, game) {
     const left = cam.x - 60;
     const right = cam.x + VIEW_W + 60;
     const step = 10;
@@ -372,38 +378,137 @@ export class Renderer {
       ctx.quadraticCurveTo(x + wide * 0.3, edge + (fromCeiling ? len * 0.55 : -len * 0.55), x + wide, edge + (fromCeiling ? -6 : 6));
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = 'rgba(120,240,222,0.14)';
+      ctx.strokeStyle = garden.edgeSoft;
+      ctx.globalAlpha = 0.22;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x - wide * 0.6, edge + (fromCeiling ? 2 : -2));
       ctx.quadraticCurveTo(x - wide * 0.2, edge + (fromCeiling ? len * 0.5 : -len * 0.5), x, fromCeiling ? edge + len : edge - len);
       ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
-    // Bright rim on both walls, the thing that makes the cavern read at once.
+    // Rim light on both walls. Emberfall and Dewglass keep the main rim in the
+    // garden's muted edge colour, with bright accents only near the player and
+    // the exit so the frame cannot collapse into one warm haze.
+    const ember = garden.id === 'emberfall';
+    const dew = garden.id === 'dewglass';
+    const mutedRim = ember || dew;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (const pass of [{ w: 11, a: 0.26, blur: 30 }, { w: 2.8, a: 0.92, blur: 12 }]) {
-      ctx.strokeStyle = garden.edge;
-      ctx.lineWidth = pass.w;
-      ctx.globalAlpha = pass.a;
-      ctx.shadowColor = garden.edge;
-      ctx.shadowBlur = pass.blur;
-      for (const side of ['ceiling', 'floor']) {
-        ctx.beginPath();
-        for (let x = left; x <= right; x += step) {
-          const y = caveAt(garden, x)[side] + (side === 'ceiling' ? 2 : -2);
-          if (x === left) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+    if (mutedRim) {
+      for (const pass of [
+        { w: 10, a: ember ? 0.12 : 0.16, blur: 18, color: garden.rockDeep },
+        { w: 2.2, a: ember ? 0.34 : 0.46, blur: 6, color: garden.edgeSoft },
+      ]) {
+        ctx.strokeStyle = pass.color;
+        ctx.lineWidth = pass.w;
+        ctx.globalAlpha = pass.a;
+        ctx.shadowColor = pass.color;
+        ctx.shadowBlur = pass.blur;
+        for (const side of ['ceiling', 'floor']) {
+          ctx.beginPath();
+          for (let x = left; x <= right; x += step) {
+            const y = caveAt(garden, x)[side] + (side === 'ceiling' ? 2 : -2);
+            if (x === left) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
         }
-        ctx.stroke();
+      }
+
+      const accents = [];
+      if (game && game.player) accents.push(game.player.x);
+      if (game && game.world && game.world.exit) accents.push(game.world.exit.x);
+      for (const accentX of accents) {
+        const lo = Math.max(left, accentX - 140);
+        const hi = Math.min(right, accentX + 140);
+        if (hi <= lo) continue;
+        ctx.strokeStyle = garden.edge;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = ember ? 0.55 : 0.7;
+        ctx.shadowColor = garden.edge;
+        ctx.shadowBlur = 10;
+        for (const side of ['ceiling', 'floor']) {
+          ctx.beginPath();
+          for (let x = lo; x <= hi; x += step) {
+            const y = caveAt(garden, x)[side] + (side === 'ceiling' ? 2 : -2);
+            if (x === lo) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+      }
+    } else {
+      for (const pass of [{ w: 11, a: 0.26, blur: 30 }, { w: 2.8, a: 0.92, blur: 12 }]) {
+        ctx.strokeStyle = garden.edge;
+        ctx.lineWidth = pass.w;
+        ctx.globalAlpha = pass.a;
+        ctx.shadowColor = garden.edge;
+        ctx.shadowBlur = pass.blur;
+        for (const side of ['ceiling', 'floor']) {
+          ctx.beginPath();
+          for (let x = left; x <= right; x += step) {
+            const y = caveAt(garden, x)[side] + (side === 'ceiling' ? 2 : -2);
+            if (x === left) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
       }
     }
     ctx.restore();
     ctx.globalAlpha = 1;
   }
 
-  drawFlora(ctx, garden, cam, t) {
+  // One wide diagonal beam from the upper left to the lower right, tinted by
+  // the garden. It parallaxes slowly against the cave and stays well below the
+  // moth's brightness.
+  drawShaft(ctx, garden, cam, t) {
+    const ember = garden.id === 'emberfall';
+    const frost = garden.id === 'frostbloom';
+    const tint = ember ? '255,208,198' : frost ? '198,222,255' : '245,243,224';
+    const slide = (((cam.x * 0.22 + Math.sin(t * 0.1) * 30) % 260) + 260) % 260 - 130;
+    const sx = cam.x + slide;
+    ctx.save();
+    const wide = ctx.createLinearGradient(sx - 160, 0, sx + 280, 0);
+    wide.addColorStop(0, `rgba(${tint},0)`);
+    wide.addColorStop(0.34, `rgba(${tint},0.10)`);
+    wide.addColorStop(0.64, `rgba(${tint},0.10)`);
+    wide.addColorStop(1, `rgba(${tint},0)`);
+    ctx.fillStyle = wide;
+    ctx.beginPath();
+    ctx.moveTo(sx - 160, -80);
+    ctx.lineTo(sx + 280, -80);
+    ctx.lineTo(sx + 1000, VIEW_H + 80);
+    ctx.lineTo(sx + 560, VIEW_H + 80);
+    ctx.closePath();
+    ctx.fill();
+
+    const core = ctx.createLinearGradient(sx + 40, -40, sx + VIEW_W + 380, VIEW_H + 40);
+    core.addColorStop(0, `rgba(${tint},0.06)`);
+    core.addColorStop(0.5, `rgba(${tint},0.2)`);
+    core.addColorStop(1, `rgba(${tint},0.04)`);
+    ctx.strokeStyle = core;
+    ctx.lineWidth = 4;
+    ctx.shadowColor = `rgba(${tint},0.25)`;
+    ctx.shadowBlur = 22;
+    ctx.beginPath();
+    ctx.moveTo(sx + 56, -40);
+    ctx.lineTo(sx + 800, VIEW_H + 40);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawFlora(ctx, garden, cam, t, game) {
+    const ember = garden.id === 'emberfall';
+    const dew = garden.id === 'dewglass';
+    const mutedFlora = ember || dew;
+    const lineColor = mutedFlora ? garden.edgeSoft : garden.flora;
+    const lineAlpha = ember ? 0.18 : dew ? 0.22 : 0.22;
+    const bulbAlpha = ember ? 0.26 : dew ? 0.38 : 0.52;
+    const bulbBlur = ember ? 5 : dew ? 7 : 9;
+    const poolAlpha = ember ? 0.09 : dew ? 0.12 : 0.18;
     const start = Math.floor(cam.x / 74) * 74;
     for (let x = start; x < cam.x + VIEW_W + 74; x += 74) {
       const h = hashAt(x, garden.seed);
@@ -411,25 +516,25 @@ export class Renderer {
       const sway = Math.sin(t * 1.05 + x * 0.01) * 5;
 
       // Hanging vines with a bulb of light at the tip.
-      if (h > 0.5) {
+      if (h > 0.72) {
         const len = 22 + h * 62;
-        ctx.strokeStyle = garden.flora;
-        ctx.globalAlpha = 0.4;
+        ctx.strokeStyle = lineColor;
+        ctx.globalAlpha = lineAlpha;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(x, ceiling + 3);
         ctx.bezierCurveTo(x + sway * 0.6, ceiling + len * 0.4, x + sway, ceiling + len * 0.75, x + sway * 1.5, ceiling + len);
         ctx.stroke();
-        ctx.globalAlpha = 0.95;
+        ctx.globalAlpha = bulbAlpha;
         ctx.fillStyle = garden.accent;
         ctx.shadowColor = garden.accent;
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = bulbBlur;
         ctx.beginPath();
-        ctx.arc(x + sway * 1.5, ceiling + len, 2.6 + h * 2.4, 0, TAU);
+        ctx.arc(x + sway * 1.5, ceiling + len, 1.45 + h * 1.3, 0, TAU);
         ctx.fill();
         ctx.shadowBlur = 0;
-        ctx.globalAlpha = 0.18;
-        ctx.fillStyle = garden.flora;
+        ctx.globalAlpha = ember ? 0.12 : 0.18;
+        ctx.fillStyle = lineColor;
         ctx.beginPath();
         ctx.ellipse(x + sway * 0.6, ceiling + len * 0.42, 3.2, 8, 0.5, 0, TAU);
         ctx.fill();
@@ -438,8 +543,8 @@ export class Renderer {
       // Fern fans on the floor.
       if (h < 0.62) {
         const len = 16 + h * 46;
-        ctx.globalAlpha = 0.36;
-        ctx.strokeStyle = garden.flora;
+        ctx.globalAlpha = ember ? 0.26 : dew ? 0.3 : 0.36;
+        ctx.strokeStyle = lineColor;
         ctx.lineWidth = 1.4;
         for (let f = -2; f <= 2; f++) {
           ctx.beginPath();
@@ -447,10 +552,10 @@ export class Renderer {
           ctx.quadraticCurveTo(x + 34 + f * 8 + sway * 0.4, floor - len * 0.6, x + 34 + f * 17 + sway, floor - len);
           ctx.stroke();
         }
-        ctx.globalAlpha = 0.7;
-        ctx.fillStyle = garden.edge;
-        ctx.shadowColor = garden.edge;
-        ctx.shadowBlur = 8;
+        ctx.globalAlpha = ember ? 0.38 : dew ? 0.52 : 0.7;
+        ctx.fillStyle = mutedFlora ? garden.edgeSoft : garden.edge;
+        ctx.shadowColor = mutedFlora ? garden.edgeSoft : garden.edge;
+        ctx.shadowBlur = ember ? 4 : dew ? 6 : 8;
         for (let f = -1; f <= 1; f++) {
           ctx.beginPath();
           ctx.arc(x + 34 + f * 17 + sway, floor - len * (0.7 - Math.abs(f) * 0.15), 1.8, 0, TAU);
@@ -464,28 +569,31 @@ export class Renderer {
         const shelfY = floor - 40 - h * 60;
         for (let m = 0; m < 2; m++) {
           const rr = 5 + h * 6 - m * 2;
-          ctx.fillStyle = `rgba(150,240,220,${0.18 - m * 0.05})`;
+          ctx.globalAlpha = (0.18 - m * 0.05) * (mutedFlora ? 0.7 : 1);
+          ctx.fillStyle = mutedFlora ? garden.edgeSoft : 'rgba(150,240,220,1)';
           ctx.beginPath();
           ctx.ellipse(x + 42, shelfY + m * 10, rr * 1.8, rr * 0.7, -0.25, Math.PI, TAU);
           ctx.fill();
         }
+        ctx.globalAlpha = 1;
       }
     }
 
     // A few shallow glowing pools on the floor, a warm counterpoint.
+    ctx.globalAlpha = 1;
     for (let x = Math.floor(cam.x / 520) * 520; x < cam.x + VIEW_W + 520; x += 520) {
       const h = hashAt(x, garden.seed + 44);
       if (h < 0.4) continue;
       const y = caveAt(garden, x).floor - 4;
       const w = 42 + h * 66;
       const glow = ctx.createRadialGradient(x, y, 2, x, y, w);
-      glow.addColorStop(0, 'rgba(255,216,140,0.18)');
+      glow.addColorStop(0, `rgba(255,216,140,${poolAlpha})`);
       glow.addColorStop(1, 'rgba(255,190,90,0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.ellipse(x, y, w, w * 0.22, 0, 0, TAU);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,230,170,0.2)';
+      ctx.strokeStyle = `rgba(255,230,170,${poolAlpha + 0.02})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.ellipse(x, y, w * 0.7, w * 0.14, 0, 0, TAU);
@@ -635,17 +743,47 @@ export class Renderer {
     const t = game.time;
     const petals = 9;
     const spread = open ? 1 : 0.5;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 1.5);
     ctx.save();
     ctx.translate(exit.x, exit.y);
 
-    const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, open ? 132 : 64);
-    halo.addColorStop(0, open ? 'rgba(232,228,255,0.5)' : 'rgba(120,150,160,0.2)');
-    halo.addColorStop(0.55, open ? 'rgba(160,190,255,0.14)' : 'rgba(90,120,130,0.06)');
+    // Beacon: a pale column from the bloom to the roof of the cavern.
+    const shaftW = 90;
+    const shaftTop = -exit.y - 60;
+    const shaftAlpha = open ? 0.16 : 0.05;
+    const shaft = ctx.createLinearGradient(-shaftW / 2, 0, shaftW / 2, 0);
+    shaft.addColorStop(0, 'rgba(214,230,255,0)');
+    shaft.addColorStop(0.35, `rgba(214,230,255,${shaftAlpha})`);
+    shaft.addColorStop(0.65, `rgba(214,230,255,${shaftAlpha})`);
+    shaft.addColorStop(1, 'rgba(214,230,255,0)');
+    ctx.fillStyle = shaft;
+    ctx.fillRect(-shaftW / 2, shaftTop, shaftW, -shaftTop);
+    const shaftCore = ctx.createLinearGradient(0, 0, 0, shaftTop);
+    shaftCore.addColorStop(0, `rgba(238,244,255,${open ? 0.2 : 0.05})`);
+    shaftCore.addColorStop(1, 'rgba(238,244,255,0)');
+    ctx.fillStyle = shaftCore;
+    ctx.fillRect(-10, shaftTop, 20, -shaftTop);
+
+    const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, open ? 150 : 70);
+    halo.addColorStop(0, open ? 'rgba(238,236,255,0.6)' : 'rgba(120,150,160,0.2)');
+    halo.addColorStop(0.55, open ? 'rgba(170,196,255,0.16)' : 'rgba(90,120,130,0.06)');
     halo.addColorStop(1, 'rgba(150,180,255,0)');
     ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(0, 0, open ? 132 : 64, 0, TAU);
+    ctx.arc(0, 0, open ? 150 : 70, 0, TAU);
     ctx.fill();
+
+    // One slow bright ring so the target reads even in a still frame.
+    ctx.strokeStyle = open
+      ? `rgba(228,238,255,${0.3 + pulse * 0.28})`
+      : 'rgba(170,196,210,0.12)';
+    ctx.lineWidth = open ? 2.4 : 1.4;
+    ctx.shadowColor = open ? 'rgba(200,220,255,0.7)' : 'transparent';
+    ctx.shadowBlur = open ? 18 : 0;
+    ctx.beginPath();
+    ctx.arc(0, 0, (open ? 78 : 46) + pulse * 6, 0, TAU);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 
     // Stem, thicker and rooted in the floor.
     ctx.strokeStyle = open ? '#b9d8c8' : '#3c5257';
@@ -693,16 +831,23 @@ export class Renderer {
         ctx.fill();
       }
     }
-    const core = ctx.createRadialGradient(0, 0, 1, 0, 0, open ? 18 : 9);
-    core.addColorStop(0, open ? '#fffbe6' : '#26363a');
-    core.addColorStop(0.5, open ? '#ffe7a0' : '#2c3e42');
-    core.addColorStop(1, open ? 'rgba(255,200,90,0.25)' : 'rgba(30,44,48,0)');
+    const core = ctx.createRadialGradient(0, 0, 1, 0, 0, open ? 22 : 9);
+    core.addColorStop(0, open ? '#ffffff' : '#26363a');
+    core.addColorStop(0.35, open ? '#fff6c8' : '#2c3e42');
+    core.addColorStop(0.7, open ? '#ffd878' : '#2c3e42');
+    core.addColorStop(1, open ? 'rgba(255,190,70,0.3)' : 'rgba(30,44,48,0)');
     ctx.fillStyle = core;
     ctx.shadowColor = open ? '#ffe9a8' : 'transparent';
-    ctx.shadowBlur = open ? 28 : 0;
+    ctx.shadowBlur = open ? 36 : 0;
     ctx.beginPath();
-    ctx.arc(0, 0, open ? 18 : 9, 0, TAU);
+    ctx.arc(0, 0, open ? 20 : 9, 0, TAU);
     ctx.fill();
+    if (open) {
+      ctx.fillStyle = 'rgba(255,255,245,0.95)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, TAU);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -774,6 +919,39 @@ export class Renderer {
     ctx.beginPath();
     ctx.arc(sx, sy, radius, 0, TAU);
     ctx.fill();
+    ctx.restore();
+  }
+
+  // A nearer, darker mass across the lower third. It is drawn last in world
+  // space, below the moth's usual lane, and gets a thin rim on its upper edge.
+  drawNearSilhouette(ctx, garden, cam, t) {
+    const par = 1.24;
+    const span = 760;
+    const shift = ((cam.x * par) % span + span) % span;
+    const cx = cam.x + shift - 140 + Math.sin(t * 0.18) * 6;
+    const topY = cam.y + VIEW_H - 122;
+    const baseY = cam.y + VIEW_H + 50;
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = garden.rockDeep;
+    ctx.beginPath();
+    ctx.moveTo(cx - 310, baseY);
+    ctx.quadraticCurveTo(cx - 280, topY + 42, cx - 190, topY + 12);
+    ctx.quadraticCurveTo(cx - 96, topY - 18, cx - 16, topY + 26);
+    ctx.quadraticCurveTo(cx + 92, topY + 78, cx + 170, topY + 44);
+    ctx.quadraticCurveTo(cx + 268, topY + 12, cx + 310, baseY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = garden.edgeSoft;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(cx - 250, topY + 54);
+    ctx.quadraticCurveTo(cx - 190, topY + 14, cx - 96, topY - 10);
+    ctx.quadraticCurveTo(cx - 16, topY + 28, cx + 92, topY + 80);
+    ctx.quadraticCurveTo(cx + 170, topY + 46, cx + 250, topY + 16);
+    ctx.stroke();
     ctx.restore();
   }
 

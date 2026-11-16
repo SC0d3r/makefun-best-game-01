@@ -19,6 +19,11 @@ function spacing(ctx, text, x, y, gap, align = 'center') {
   return total;
 }
 
+function trackedWidth(ctx, text, gap) {
+  const chars = [...text];
+  return chars.reduce((sum, c) => sum + ctx.measureText(c).width, 0) + gap * (chars.length - 1);
+}
+
 export class Hud {
   constructor() {
     this.hintFade = 0;
@@ -30,10 +35,13 @@ export class Hud {
       this.drawTitle(ctx, game);
       return;
     }
+    if (state === 'victory') {
+      this.drawVictory(ctx, game);
+      return;
+    }
     this.drawFlightHud(ctx, game);
     if (state === 'paused') this.drawPause(ctx, game);
     if (state === 'clear') this.drawClear(ctx, game);
-    if (state === 'victory') this.drawVictory(ctx, game);
     if (state === 'gameover') this.drawGameOver(ctx, game);
   }
 
@@ -41,15 +49,15 @@ export class Hud {
   drawTitle(ctx, game) {
     const t = game.time;
     const veil = ctx.createLinearGradient(0, 0, 0, VIEW_H);
-    veil.addColorStop(0, 'rgba(2,6,14,0.62)');
-    veil.addColorStop(0.42, 'rgba(2,8,16,0.38)');
-    veil.addColorStop(0.78, 'rgba(2,6,12,0.56)');
+    veil.addColorStop(0, 'rgba(2,6,14,0.58)');
+    veil.addColorStop(0.38, 'rgba(2,8,16,0.34)');
+    veil.addColorStop(0.78, 'rgba(2,6,12,0.54)');
     veil.addColorStop(1, 'rgba(1,4,9,0.84)');
     ctx.fillStyle = veil;
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 
     // A soft column of light behind the title, breathing slowly.
-    const beam = ctx.createRadialGradient(VIEW_W / 2, 250, 20, VIEW_W / 2, 250, 520);
+    const beam = ctx.createRadialGradient(VIEW_W / 2, 228, 20, VIEW_W / 2, 228, 380);
     beam.addColorStop(0, `rgba(255,214,133,${0.13 + Math.sin(t * 0.7) * 0.03})`);
     beam.addColorStop(0.5, 'rgba(255,190,90,0.05)');
     beam.addColorStop(1, 'rgba(255,180,80,0)');
@@ -61,109 +69,184 @@ export class Hud {
     ctx.textBaseline = 'middle';
 
     // Small eyebrow, then the name.
-    ctx.font = `600 15px ${SANS}`;
+    ctx.font = `600 24px ${SANS}`;
     ctx.fillStyle = 'rgba(200,240,232,0.62)';
-    spacing(ctx, 'A LANTERN MOTH IN THREE SLEEPING GARDENS', VIEW_W / 2, 176, 5.4);
+    spacing(ctx, 'A LANTERN MOTH IN THREE SLEEPING GARDENS', VIEW_W / 2, 150, 5.4);
 
-    ctx.font = `700 86px ${SERIF}`;
+    ctx.font = `700 96px ${SERIF}`;
     ctx.shadowColor = 'rgba(255,208,120,0.55)';
     ctx.shadowBlur = 34;
-    const name = ctx.createLinearGradient(0, 190, 0, 268);
+    const name = ctx.createLinearGradient(0, 172, 0, 250);
     name.addColorStop(0, '#fff8e2');
     name.addColorStop(0.55, '#ffe3a8');
     name.addColorStop(1, '#f3b967');
     ctx.fillStyle = name;
-    spacing(ctx, 'LUMENWING', VIEW_W / 2, 232, 8);
+    spacing(ctx, 'LUMENWING', VIEW_W / 2, 214, 8);
     ctx.shadowBlur = 0;
 
     // A thin divider with a seed at its centre.
     ctx.strokeStyle = 'rgba(255,220,150,0.35)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(VIEW_W / 2 - 250, 284);
-    ctx.lineTo(VIEW_W / 2 - 20, 284);
-    ctx.moveTo(VIEW_W / 2 + 20, 284);
-    ctx.lineTo(VIEW_W / 2 + 250, 284);
+    ctx.moveTo(VIEW_W / 2 - 250, 266);
+    ctx.lineTo(VIEW_W / 2 - 20, 266);
+    ctx.moveTo(VIEW_W / 2 + 20, 266);
+    ctx.lineTo(VIEW_W / 2 + 250, 266);
     ctx.stroke();
     ctx.fillStyle = '#ffdf9c';
     ctx.shadowColor = '#ffd07a';
     ctx.shadowBlur = 16;
     ctx.beginPath();
-    ctx.arc(VIEW_W / 2, 284, 4.5, 0, TAU);
+    ctx.arc(VIEW_W / 2, 266, 4.5, 0, TAU);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    ctx.font = `italic 400 21px ${SERIF}`;
-    ctx.fillStyle = 'rgba(232,244,238,0.86)';
-    ctx.fillText('Gather the sunseeds. Wake the moonflowers. Keep your light.', VIEW_W / 2, 326);
+    ctx.font = `italic 400 26px ${SERIF}`;
+    ctx.fillStyle = 'rgba(232,244,238,0.88)';
+    ctx.fillText('Fly a lantern moth. Gather sunseeds, wake moonflowers, keep your light.', VIEW_W / 2, 308);
 
-    // Three garden names as a quiet row of chapters.
-    ctx.font = `500 14px ${SANS}`;
-    const names = ['I  DEWGLASS', 'II  EMBERFALL', 'III  FROSTBLOOM'];
-    names.forEach((n, i) => {
-      const x = VIEW_W / 2 + (i - 1) * 214;
-      ctx.fillStyle = i === 0 ? 'rgba(255,224,160,0.85)' : 'rgba(198,226,220,0.5)';
-      spacing(ctx, n, x, 372, 3.2);
-    });
-
-    // Controls card.
-    const cardW = 640;
-    const cardH = 126;
-    const cardX = VIEW_W / 2 - cardW / 2;
-    const cardY = 408;
+    // Controls: one quiet line on a wide plate.
+    const controlsText = 'ARROWS FLY     SPACE PULSE     P PAUSE / M MUTE';
+    let controlsSize = 22;
+    ctx.font = `600 ${controlsSize}px ${SANS}`;
+    if (trackedWidth(ctx, controlsText, 2.2) > 720) controlsSize = 20;
     ctx.fillStyle = 'rgba(6,16,24,0.66)';
-    this.roundRect(ctx, cardX, cardY, cardW, cardH, 14);
+    this.roundRect(ctx, 260, 396, 760, 60, 14);
     ctx.fill();
     ctx.strokeStyle = 'rgba(120,230,208,0.22)';
     ctx.lineWidth = 1;
-    this.roundRect(ctx, cardX, cardY, cardW, cardH, 14);
-    ctx.stroke();
-
-    ctx.textAlign = 'left';
-    ctx.font = `600 12px ${SANS}`;
-    ctx.fillStyle = 'rgba(140,236,220,0.72)';
-    spacing(ctx, 'FLY', cardX + 34, cardY + 28, 2.6, 'left');
-    ctx.fillStyle = 'rgba(255,226,168,0.72)';
-    spacing(ctx, 'PULSE', cardX + 258, cardY + 28, 2.6, 'left');
-    ctx.fillStyle = 'rgba(190,214,236,0.72)';
-    spacing(ctx, 'PAUSE / MUTE', cardX + 410, cardY + 28, 2.6, 'left');
-    ctx.font = `600 19px ${SANS}`;
-    ctx.fillStyle = '#fbf8ee';
-    ctx.fillText('Arrows or WASD', cardX + 34, cardY + 58);
-    ctx.fillText('Space', cardX + 258, cardY + 58);
-    ctx.fillText('P  /  M', cardX + 410, cardY + 58);
-
-    ctx.font = `400 15px ${SERIF}`;
-    ctx.fillStyle = 'rgba(206,230,224,0.66)';
-    ctx.fillText('The lantern burns oil as you fly. Seeds refill it, and every', cardX + 34, cardY + 92);
-    ctx.fillText('moonflower you wake carries you on to the next garden.', cardX + 34, cardY + 113);
-
-    // Press-to-start, pulsing.
-    const pulse = 0.55 + 0.45 * Math.sin(t * 2.4);
-    ctx.fillStyle = 'rgba(2,6,12,0.55)';
-    this.roundRect(ctx, VIEW_W / 2 - 270, 584, 540, 56, 28);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,220,150,0.18)';
-    ctx.lineWidth = 1;
-    this.roundRect(ctx, VIEW_W / 2 - 270, 584, 540, 56, 28);
+    this.roundRect(ctx, 260, 396, 760, 60, 14);
     ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.font = `600 22px ${SANS}`;
-    ctx.fillStyle = `rgba(255,248,224,${0.65 + pulse * 0.35})`;
-    ctx.shadowColor = 'rgba(255,208,120,0.5)';
-    ctx.shadowBlur = 20;
-    spacing(ctx, 'PRESS  ENTER  TO  WAKE', VIEW_W / 2, 612, 4.2);
+    ctx.font = `600 ${controlsSize}px ${SANS}`;
+    ctx.fillStyle = 'rgba(255,236,200,0.92)';
+    spacing(ctx, controlsText, VIEW_W / 2, 426, 2.2);
+
+    // The game's second noun, level with the control card on the right.
+    this.drawTitleMoonflower(ctx, 1060, 470, t, 36);
+
+    // Start button, pushed down so it separates from the controls card.
+    const pulse = 0.5 + 0.5 * Math.sin(t * 1.8);
+    const pillW = 560;
+    const pillH = 76;
+    const pillX = VIEW_W / 2 - pillW / 2;
+    const pillY = 560;
+    ctx.save();
+    ctx.shadowColor = `rgba(255,208,120,${0.2 + pulse * 0.16})`;
+    ctx.shadowBlur = 26;
+    const pillFill = ctx.createLinearGradient(pillX, 0, pillX + pillW, 0);
+    pillFill.addColorStop(0, 'rgba(255,196,96,0.32)');
+    pillFill.addColorStop(1, 'rgba(255,196,96,0.02)');
+    ctx.fillStyle = pillFill;
+    this.roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.fill();
     ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,226,150,0.9)';
+    ctx.lineWidth = 1;
+    this.roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.textAlign = 'center';
+    ctx.font = `600 32px ${SANS}`;
+    ctx.fillStyle = '#fff9ec';
+    const textW = spacing(ctx, 'PRESS ENTER TO WAKE', VIEW_W / 2, pillY + pillH / 2, 3.2);
+    ctx.strokeStyle = `rgba(255,214,130,${0.25 + pulse * 0.45})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(VIEW_W / 2 - textW / 2, pillY + pillH - 12);
+    ctx.lineTo(VIEW_W / 2 + textW / 2, pillY + pillH - 12);
+    ctx.stroke();
 
     if (game.best > 0) {
-      ctx.font = `500 14px ${SANS}`;
-      ctx.fillStyle = 'rgba(198,226,220,0.5)';
-      spacing(ctx, `BEST FLIGHT  ${game.best.toLocaleString('en-US')}`, VIEW_W / 2, 654, 3);
+      ctx.font = `500 20px ${SANS}`;
+      ctx.fillStyle = 'rgba(198,226,220,0.55)';
+      spacing(ctx, `BEST FLIGHT  ${game.best.toLocaleString('en-US')}`, VIEW_W / 2, 672, 3);
     }
 
-    ctx.font = `400 12px ${SANS}`;
-    ctx.fillStyle = 'rgba(180,206,200,0.34)';
-    ctx.fillText('A game drawn entirely in code. No downloads, no network.', VIEW_W / 2, 692);
+    ctx.font = `500 18px ${SANS}`;
+    ctx.fillStyle = 'rgba(180,206,200,0.4)';
+    spacing(ctx, 'I  DEWGLASS     II  EMBERFALL     III  FROSTBLOOM', VIEW_W / 2, 698, 2.4);
+    ctx.restore();
+  }
+
+  // The moonflower on the cover, in the same visual language as drawExit.
+  drawTitleMoonflower(ctx, x, y, t, r = 36) {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 1.4);
+    ctx.save();
+    ctx.translate(x, y);
+
+    // A short, faint shaft of light above the bloom.
+    const shaft = ctx.createLinearGradient(0, -r * 2.8, 0, 0);
+    shaft.addColorStop(0, 'rgba(214,230,255,0)');
+    shaft.addColorStop(0.55, 'rgba(214,230,255,0.1)');
+    shaft.addColorStop(1, 'rgba(214,230,255,0.03)');
+    ctx.fillStyle = shaft;
+    ctx.fillRect(-r * 0.32, -r * 2.8, r * 0.64, r * 2.8);
+
+    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, r * 2.4);
+    glow.addColorStop(0, 'rgba(236,232,255,0.5)');
+    glow.addColorStop(0.5, 'rgba(170,196,255,0.14)');
+    glow.addColorStop(1, 'rgba(150,180,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 2.4, 0, TAU);
+    ctx.fill();
+
+    ctx.strokeStyle = `rgba(228,238,255,${0.25 + pulse * 0.2})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.35 + pulse * 3, 0, TAU);
+    ctx.stroke();
+
+    const petals = 9;
+    for (let i = 0; i < petals; i++) {
+      const a = (i / petals) * TAU + t * 0.12;
+      ctx.save();
+      ctx.rotate(a);
+      const len = r * (i % 2 === 0 ? 0.98 : 0.82);
+      const petal = ctx.createLinearGradient(0, 0, 0, -len);
+      petal.addColorStop(0, '#f6f2ff');
+      petal.addColorStop(0.55, '#cfd4ff');
+      petal.addColorStop(1, '#8f9fe8');
+      ctx.fillStyle = petal;
+      ctx.strokeStyle = 'rgba(120,130,220,0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(0, -len * 0.58, r * 0.19, len, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = 'rgba(255,240,190,0.7)';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * TAU + t * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * r * 0.26, Math.sin(a) * r * 0.26);
+      ctx.stroke();
+      ctx.fillStyle = '#ffeaa8';
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * r * 0.26, Math.sin(a) * r * 0.26, 1.8, 0, TAU);
+      ctx.fill();
+    }
+    const core = ctx.createRadialGradient(0, 0, 1, 0, 0, r * 0.4);
+    core.addColorStop(0, '#ffffff');
+    core.addColorStop(0.35, '#fff6c8');
+    core.addColorStop(0.7, '#ffd878');
+    core.addColorStop(1, 'rgba(255,190,70,0.3)');
+    ctx.fillStyle = core;
+    ctx.shadowColor = '#ffe9a8';
+    ctx.shadowBlur = 24;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.36, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,245,0.95)';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.14, 0, TAU);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -174,136 +257,152 @@ export class Hud {
     ctx.save();
     ctx.textBaseline = 'middle';
 
-    // Top-left plate: chapter and garden.
-    this.plate(ctx, 30, 26, 292, 64);
+    // Top-left: the score, as one big bright number.
+    this.plate(ctx, 30, 26, 280, 78);
     ctx.textAlign = 'left';
-    ctx.font = `600 12px ${SANS}`;
-    ctx.fillStyle = 'rgba(150,240,224,0.9)';
-    spacing(ctx, `GARDEN ${world.index + 1} OF 3`, 50, 45, 2.4, 'left');
-    ctx.font = `600 20px ${SERIF}`;
-    ctx.fillStyle = '#f8f4e6';
-    ctx.fillText(garden.name, 50, 70);
+    ctx.font = `600 20px ${SANS}`;
+    ctx.fillStyle = 'rgba(150,240,224,0.88)';
+    spacing(ctx, 'SCORE', 50, 44, 2.2, 'left');
+    ctx.font = `700 44px ${SANS}`;
+    ctx.fillStyle = '#fff8e2';
+    ctx.shadowColor = 'rgba(255,214,140,0.55)';
+    ctx.shadowBlur = 14;
+    ctx.fillText(player.score.toLocaleString('en-US'), 50, 78);
+    ctx.shadowBlur = 0;
 
-    // Top-centre plate: sunseeds gathered, as a count with lit and unlit pips.
-    const seedW = 236;
-    const seedX = VIEW_W / 2 - seedW / 2;
-    this.plate(ctx, seedX, 26, seedW, 64);
+    // Top-centre: flight time, turning amber after four minutes.
+    const timeW = 230;
+    const timeX = VIEW_W / 2 - timeW / 2;
+    this.plate(ctx, timeX, 26, timeW, 78);
+    ctx.textAlign = 'center';
+    ctx.font = `600 20px ${SANS}`;
+    ctx.fillStyle = 'rgba(206,230,224,0.85)';
+    spacing(ctx, 'TIME', VIEW_W / 2, 44, 3);
+    const late = game.elapsed > 240;
+    ctx.font = `700 34px ${SANS}`;
+    ctx.fillStyle = late ? '#ffc46b' : '#fbf7e8';
+    ctx.shadowColor = late ? 'rgba(255,180,90,0.5)' : 'rgba(255,214,140,0.35)';
+    ctx.shadowBlur = 10;
+    ctx.fillText(formatTime(game.elapsed), VIEW_W / 2, 78);
+    ctx.shadowBlur = 0;
+
+    // Top-right: the sunseed count and one pip per moonflower seed.
+    const seedW = 280;
+    const seedX = VIEW_W - 30 - seedW;
+    this.plate(ctx, seedX, 26, seedW, 78);
     const got = player.seeds;
     const need = garden.seeds;
-    const ready = got >= need;
-    const pipGap = 24;
-    const pipStart = VIEW_W / 2 - ((need - 1) * pipGap) / 2;
-    for (let i = 0; i < need; i++) {
-      this.seedIcon(ctx, pipStart + i * pipGap, 47, i < got, garden.accent);
-    }
-    ctx.textAlign = 'center';
-    ctx.font = `700 15px ${SANS}`;
-    ctx.fillStyle = ready ? '#ffe9ad' : '#f2f7f2';
-    const label = ready ? `MOONFLOWER AWAKE` : `SUNSEEDS  ${got} / ${need}`;
-    spacing(ctx, label, VIEW_W / 2, 73, 2.4);
-
-    // Top-right plate: hearts and score.
-    const rightX = VIEW_W - 30 - 268;
-    this.plate(ctx, rightX, 26, 268, 64);
-    for (let i = 0; i < player.maxHearts; i++) {
-      this.heartIcon(ctx, rightX + 28 + i * 36, 49, i < player.hearts);
-    }
-    ctx.textAlign = 'right';
-    ctx.font = `600 12px ${SANS}`;
-    ctx.fillStyle = 'rgba(206,230,224,0.72)';
-    spacing(ctx, 'SCORE', VIEW_W - 50, 43, 2.4, 'right');
-    ctx.font = `700 24px ${SANS}`;
-    ctx.fillStyle = '#fbf7e8';
-    ctx.fillText(player.score.toLocaleString('en-US'), VIEW_W - 50, 68);
-
-    // Bottom-left: the oil that keeps the lantern lit, plus the pulse key.
-    const oilCardY = VIEW_H - 26 - 78;
-    this.plate(ctx, 30, oilCardY, 330, 78);
     ctx.textAlign = 'left';
-    const low = player.oil < 24;
-    ctx.font = `600 12px ${SANS}`;
-    ctx.fillStyle = low ? `rgba(255,150,120,${0.65 + Math.sin(game.time * 8) * 0.3})` : 'rgba(255,220,150,0.92)';
-    spacing(ctx, low ? 'LANTERN OIL  LOW' : 'LANTERN OIL', 50, oilCardY + 22, 2.4, 'left');
-
-    ctx.save();
+    ctx.font = `600 20px ${SANS}`;
+    ctx.fillStyle = 'rgba(255,226,168,0.9)';
+    spacing(ctx, 'SUNSEEDS', seedX + 20, 46, 2.2, 'left');
     ctx.textAlign = 'right';
-    ctx.font = `600 10px ${SANS}`;
-    ctx.fillStyle = 'rgba(170,200,196,0.7)';
-    spacing(ctx, 'PULSE', 340, oilCardY + 22, 2, 'right');
-    ctx.restore();
-    this.keycap(ctx, 246, oilCardY + 13, 46, 'SPACE');
+    ctx.font = `700 34px ${SANS}`;
+    ctx.fillStyle = got >= need ? '#ffe9ad' : '#fbf7e8';
+    ctx.fillText(`${got} / ${need}`, seedX + seedW - 20, 46);
+    const pipGap = 24;
+    const pipCenter = seedX + seedW / 2;
+    const pipStart = pipCenter - ((need - 1) * pipGap) / 2;
+    for (let i = 0; i < need; i++) {
+      this.seedIcon(ctx, pipStart + i * pipGap, 78, i < got, garden.accent);
+    }
 
-    const barX = 50;
-    const barY = oilCardY + 40;
-    const barW = 290;
-    const barH = 14;
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    this.roundRect(ctx, barX, barY, barW, barH, 7);
+    // Bottom-left: oil bar, hearts and the pulse key in one plate.
+    const oilCardY = VIEW_H - 26 - 74;
+    this.plate(ctx, 24, oilCardY, 288, 74);
+    const low = player.oil < 24;
+    ctx.textAlign = 'left';
+    ctx.font = `600 20px ${SANS}`;
+    ctx.fillStyle = low ? `rgba(255,150,120,${0.7 + Math.sin(game.time * 8) * 0.25})` : 'rgba(255,220,150,0.94)';
+    spacing(ctx, low ? 'OIL LOW' : 'LANTERN OIL', 44, oilCardY + 20, 0.8, 'left');
+    for (let i = 0; i < player.maxHearts; i++) {
+      this.heartIcon(ctx, 224 + i * 22, oilCardY + 20, i < player.hearts, 0.88);
+    }
+
+    const barX = 44;
+    const barY = oilCardY + 38;
+    const barW = 248;
+    const barH = 18;
+    ctx.fillStyle = 'rgba(18,12,7,0.72)';
+    this.roundRect(ctx, barX, barY, barW, barH, 9);
     ctx.fill();
     const fill = clamp(player.oil / player.maxOil, 0, 1);
     ctx.save();
-    this.roundRect(ctx, barX, barY, barW, barH, 7);
+    this.roundRect(ctx, barX + 2, barY + 2, barW - 4, barH - 4, 7);
     ctx.clip();
     const oilGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
-    oilGrad.addColorStop(0, low ? '#ff7d5c' : '#ffb85c');
-    oilGrad.addColorStop(1, low ? '#ff5c5c' : '#ffe6a6');
+    oilGrad.addColorStop(0, low ? '#ff7d5c' : '#ffb04e');
+    oilGrad.addColorStop(0.7, low ? '#ff5c5c' : '#ffd77e');
+    oilGrad.addColorStop(1, low ? '#ffb08a' : '#fff0c0');
     ctx.fillStyle = oilGrad;
-    ctx.fillRect(barX, barY, barW * fill, barH);
+    ctx.fillRect(barX + 2, barY + 2, (barW - 4) * fill, barH - 4);
     ctx.restore();
-    ctx.strokeStyle = 'rgba(255,220,150,0.18)';
-    ctx.lineWidth = 1;
-    this.roundRect(ctx, barX, barY, barW, barH, 7);
+    ctx.strokeStyle = 'rgba(20,12,4,0.95)';
+    ctx.lineWidth = 1.5;
+    this.roundRect(ctx, barX, barY, barW, barH, 9);
     ctx.stroke();
-    if (low) {
-      ctx.fillStyle = `rgba(255,190,170,${0.6 + Math.sin(game.time * 6) * 0.3})`;
-      ctx.beginPath();
-      ctx.arc(barX + barW + 14, barY + barH / 2, 3, 0, TAU);
-      ctx.fill();
-    }
+    ctx.textAlign = 'center';
+    ctx.font = `700 20px ${SANS}`;
+    ctx.fillStyle = '#20140a';
+    ctx.fillText(`${Math.round(player.oil)}%`, barX + barW / 2, barY + barH / 2 + 0.5);
 
-    // Bottom-right: flight time and where this run stands in the three gardens.
-    const timeX = VIEW_W - 30 - 268;
-    this.plate(ctx, timeX, oilCardY, 268, 78);
-    ctx.textAlign = 'right';
-    ctx.font = `600 12px ${SANS}`;
-    ctx.fillStyle = 'rgba(206,230,224,0.72)';
-    spacing(ctx, 'FLIGHT TIME', VIEW_W - 50, oilCardY + 22, 2.4, 'right');
-    ctx.font = `700 24px ${SANS}`;
-    ctx.fillStyle = '#fbf7e8';
-    ctx.fillText(formatTime(game.elapsed), VIEW_W - 50, oilCardY + 47);
-    for (let i = 0; i < 3; i++) {
-      const dotX = timeX + 36 + i * 18;
-      const done = i < world.index;
-      const here = i === world.index;
-      ctx.fillStyle = done ? '#8ff2dd' : here ? '#ffd685' : 'rgba(200,226,220,0.22)';
-      ctx.beginPath();
-      ctx.arc(dotX, oilCardY + 63, here ? 4 : 3, 0, TAU);
-      ctx.fill();
-    }
+    // Lower centre: the cover carries the win/lose rules in words.
+    const rulesX = 320;
+    const rulesY = 552;
+    const rulesW = 650;
+    const rulesH = 142;
+    ctx.fillStyle = 'rgba(3,9,14,0.86)';
+    this.roundRect(ctx, rulesX, rulesY, rulesW, rulesH, 18);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,226,168,0.38)';
+    ctx.lineWidth = 1;
+    this.roundRect(ctx, rulesX, rulesY, rulesW, rulesH, 18);
+    ctx.stroke();
 
-    // A quiet first-garden hint that fades after a few seconds.
-    if (world.index === 0 && game.elapsed < 9) {
-      const a = clamp(Math.min(game.elapsed / 0.6, (9 - game.elapsed) / 1.5), 0, 1) * 0.85;
-      ctx.textAlign = 'center';
-      ctx.font = `italic 400 18px ${SERIF}`;
-      ctx.fillStyle = `rgba(240,248,238,${a})`;
-      ctx.fillText('Follow the glow. Sunseeds wake the moonflower at the end of the garden.', VIEW_W / 2, VIEW_H - 92);
+    const winText = 'WIN:  WAKE 3 MOONFLOWERS';
+    const loseText = 'LOSE:  LANTERN OUT = RUN OVER';
+    let ruleSize = 28;
+    while (ruleSize > 24) {
+      ctx.font = `700 ${ruleSize}px ${SANS}`;
+      if (
+        trackedWidth(ctx, winText, 1.6) <= 606 &&
+        trackedWidth(ctx, loseText, 1.6) <= 606
+      ) break;
+      ruleSize--;
     }
+    ctx.textAlign = 'center';
+    ctx.font = `700 ${ruleSize}px ${SANS}`;
+    ctx.fillStyle = '#ffe9ad';
+    spacing(ctx, winText, 645, 582, 1.6);
+    ctx.fillStyle = '#ffb49e';
+    spacing(ctx, loseText, 645, 618, 1.6);
+
+    const controlsText = 'ARROWS FLY    SPACE PULSE';
+    let controlSize = 23;
+    while (controlSize > 21) {
+      ctx.font = `600 ${controlSize}px ${SANS}`;
+      if (trackedWidth(ctx, controlsText, 1.8) <= 606) break;
+      controlSize--;
+    }
+    ctx.font = `600 ${controlSize}px ${SANS}`;
+    ctx.fillStyle = 'rgba(255,236,200,0.94)';
+    spacing(ctx, controlsText, 645, 654, 1.8);
+
     ctx.restore();
   }
 
-  keycap(ctx, x, y, w, label) {
+  keycap(ctx, x, y, w, label, h = 19, size = 9) {
     ctx.fillStyle = 'rgba(255,236,190,0.12)';
-    this.roundRect(ctx, x, y, w, 19, 4);
+    this.roundRect(ctx, x, y, w, h, 6);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,220,150,0.4)';
     ctx.lineWidth = 1;
-    this.roundRect(ctx, x, y, w, 19, 4);
+    this.roundRect(ctx, x, y, w, h, 6);
     ctx.stroke();
     ctx.textAlign = 'center';
-    ctx.font = `600 9px ${SANS}`;
-    ctx.fillStyle = 'rgba(255,240,205,0.9)';
-    ctx.fillText(label, x + w / 2, y + 10.5);
+    ctx.font = `600 ${size}px ${SANS}`;
+    ctx.fillStyle = 'rgba(255,240,205,0.92)';
+    ctx.fillText(label, x + w / 2, y + h / 2 + 0.5);
   }
 
   // ---------------------------------------------------------------- cards ---
@@ -364,99 +463,203 @@ export class Hud {
   }
 
   drawVictory(ctx, game) {
-    this.veil(ctx, 0.42);
-    this.card(ctx, 300, 152, 680, 420);
+    this.veil(ctx, 0.5);
+    const cx = VIEW_W / 2;
+    const t = game.time;
+
+    // The results card: near opaque, 2 px edge, soft outer shadow.
+    const cardX = 300;
+    const cardY = 96;
+    const cardW = 680;
+    const cardH = 536;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.65)';
+    ctx.shadowBlur = 46;
+    ctx.shadowOffsetY = 18;
+    ctx.fillStyle = 'rgba(4,12,18,0.94)';
+    this.roundRect(ctx, cardX, cardY, cardW, cardH, 22);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = 'rgba(255,220,150,0.55)';
+    ctx.lineWidth = 2;
+    this.roundRect(ctx, cardX, cardY, cardW, cardH, 22);
+    ctx.stroke();
+    ctx.restore();
+
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const t = game.time;
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 26) * TAU + t * 0.12;
-      const r = 138 + Math.sin(t * 0.9 + i) * 12;
-      const x = VIEW_W / 2 + Math.cos(a) * r * 1.6;
-      const y = 322 + Math.sin(a) * r * 0.8;
-      const glow = ctx.createRadialGradient(x, y, 0, x, y, 18);
-      glow.addColorStop(0, 'rgba(255,236,168,0.55)');
+    // A little warm bokeh behind the header.
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * TAU + t * 0.1;
+      const r = 118 + Math.sin(t * 0.9 + i) * 10;
+      const x = cx + Math.cos(a) * r * 1.55;
+      const y = 196 + Math.sin(a) * r * 0.52;
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, 16);
+      glow.addColorStop(0, 'rgba(255,236,168,0.4)');
       glow.addColorStop(1, 'rgba(255,210,120,0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.arc(x, y, 18, 0, TAU);
+      ctx.arc(x, y, 16, 0, TAU);
       ctx.fill();
     }
 
-    ctx.font = `600 12px ${SANS}`;
-    ctx.fillStyle = 'rgba(140,236,220,0.85)';
-    spacing(ctx, 'ALL THREE GARDENS AWAKE', VIEW_W / 2, 214, 3.6);
-    ctx.font = `700 58px ${SERIF}`;
-    const gold = ctx.createLinearGradient(0, 236, 0, 292);
+    ctx.font = `700 32px ${SANS}`;
+    ctx.fillStyle = '#fff8e2';
+    ctx.shadowColor = 'rgba(255,208,120,0.55)';
+    ctx.shadowBlur = 24;
+    spacing(ctx, 'RUN COMPLETE', cx, 146, 5);
+    ctx.shadowBlur = 0;
+
+    ctx.font = `700 84px ${SERIF}`;
+    const gold = ctx.createLinearGradient(0, 174, 0, 254);
     gold.addColorStop(0, '#fffbe8');
     gold.addColorStop(1, '#f2c274');
     ctx.fillStyle = gold;
     ctx.shadowColor = 'rgba(255,208,120,0.6)';
     ctx.shadowBlur = 32;
-    spacing(ctx, 'DAWN', VIEW_W / 2, 266, 10);
+    spacing(ctx, 'DAWN BREAKS', cx, 214, 2);
     ctx.shadowBlur = 0;
-    ctx.font = `italic 400 18px ${SERIF}`;
-    ctx.fillStyle = 'rgba(230,242,236,0.82)';
-    ctx.fillText('The lantern moth carried the morning through the dark.', VIEW_W / 2, 316);
 
-    this.statRow(ctx, VIEW_W / 2, 372, [
-      ['SCORE', game.player.score.toLocaleString('en-US')],
-      ['TIME', formatTime(game.elapsed)],
-      ['BEST', Math.max(game.best, game.player.score).toLocaleString('en-US')],
-    ]);
+    ctx.font = `italic 400 22px ${SERIF}`;
+    ctx.fillStyle = 'rgba(230,242,236,0.72)';
+    ctx.fillText('The lantern moth carried the morning through the dark.', cx, 278);
 
-    if (game.player.score >= game.best && game.newBest) {
-      ctx.font = `600 14px ${SANS}`;
-      ctx.fillStyle = 'rgba(255,226,168,0.95)';
-      spacing(ctx, 'NEW  BEST  FLIGHT', VIEW_W / 2, 430, 4);
-    }
+    // Stats card with the score as the one hero number.
+    const statX = 360;
+    const statY = 300;
+    const statW = 560;
+    const statH = 196;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = 'rgba(2,7,12,0.91)';
+    this.roundRect(ctx, statX, statY, statW, statH, 16);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = 'rgba(255,220,150,0.34)';
+    ctx.lineWidth = 2;
+    this.roundRect(ctx, statX, statY, statW, statH, 16);
+    ctx.stroke();
+    ctx.restore();
 
-    const pulse = 0.55 + 0.45 * Math.sin(t * 2.6);
-    ctx.font = `600 17px ${SANS}`;
-    ctx.fillStyle = `rgba(255,244,214,${0.5 + pulse * 0.5})`;
-    spacing(ctx, 'PRESS  R  TO  FLY  AGAIN', VIEW_W / 2, 500, 3.6);
+    ctx.font = `600 20px ${SANS}`;
+    ctx.fillStyle = 'rgba(180,214,208,0.8)';
+    spacing(ctx, 'SCORE', cx, statY + 28, 3);
+    ctx.font = `700 72px ${SANS}`;
+    ctx.fillStyle = '#fff8e2';
+    ctx.shadowColor = 'rgba(255,208,120,0.45)';
+    ctx.shadowBlur = 18;
+    ctx.fillText(game.player.score.toLocaleString('en-US'), cx, statY + 86);
+    ctx.shadowBlur = 0;
+
+    const timeBestX = [cx - 118, cx + 118];
+    const bestText = game.best > game.player.score ? game.best.toLocaleString('en-US') : 'NEW';
+    ctx.font = `600 20px ${SANS}`;
+    ctx.fillStyle = 'rgba(180,214,208,0.78)';
+    spacing(ctx, 'TIME', timeBestX[0], statY + 140, 2.4);
+    spacing(ctx, 'BEST', timeBestX[1], statY + 140, 2.4);
+    ctx.font = `700 30px ${SANS}`;
+    ctx.fillStyle = '#f6f2e4';
+    ctx.fillText(formatTime(game.elapsed), timeBestX[0], statY + 172);
+    ctx.fillText(bestText, timeBestX[1], statY + 172);
+
+    // Restart pill with a key glyph, the only prompt on the screen.
+    const pillW = 620;
+    const pillH = 96;
+    const pillX = cx - pillW / 2;
+    const pillY = 520;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
+    ctx.save();
+    ctx.shadowColor = `rgba(255,205,110,${0.22 + pulse * 0.14})`;
+    ctx.shadowBlur = 30;
+    const pillFill = ctx.createLinearGradient(pillX, 0, pillX + pillW, 0);
+    pillFill.addColorStop(0, 'rgba(255,205,110,0.24)');
+    pillFill.addColorStop(1, 'rgba(255,205,110,0.12)');
+    ctx.fillStyle = pillFill;
+    this.roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,222,150,0.8)';
+    ctx.lineWidth = 1.5;
+    this.roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.font = `600 44px ${SANS}`;
+    const label = 'FLY AGAIN';
+    const labelW = ctx.measureText(label).width;
+    const keyW = 44;
+    const gap = 16;
+    const startX = cx - (keyW + gap + labelW) / 2;
+    ctx.fillStyle = 'rgba(255,222,150,0.12)';
+    this.roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,222,150,0.8)';
+    ctx.lineWidth = 1.2;
+    this.roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 8);
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.font = `700 26px ${SANS}`;
+    ctx.fillStyle = '#fff4d8';
+    ctx.fillText('R', startX + keyW / 2, pillY + pillH / 2 + 1);
+    ctx.textAlign = 'left';
+    ctx.font = `600 44px ${SANS}`;
+    ctx.fillStyle = '#fff8ec';
+    ctx.fillText(label, startX + keyW + gap, pillY + pillH / 2 + 1);
+
     ctx.restore();
   }
 
   drawGameOver(ctx, game) {
     this.veil(ctx, 0.66);
-    this.card(ctx, 340, 190, 600, 344);
+    this.card(ctx, 320, 140, 640, 430);
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `600 12px ${SANS}`;
+    ctx.font = `600 30px ${SANS}`;
     ctx.fillStyle = 'rgba(255,140,110,0.85)';
-    spacing(ctx, 'THE LANTERN WENT DARK', VIEW_W / 2, 246, 3.6);
-    ctx.font = `700 46px ${SERIF}`;
+    spacing(ctx, 'THE LANTERN WENT DARK', VIEW_W / 2, 186, 3.6);
+    ctx.font = `700 80px ${SERIF}`;
     ctx.fillStyle = '#fdf1e4';
-    ctx.fillText('The garden keeps you.', VIEW_W / 2, 300);
-    ctx.font = `italic 400 17px ${SERIF}`;
+    // Georgia Bold at 80 px is slightly wider than the 640 px card, so trim the
+    // width without changing the size of the letterforms.
+    ctx.save();
+    ctx.translate(VIEW_W / 2, 250);
+    ctx.scale(0.95, 1);
+    ctx.fillText('THE LIGHT DIES', 0, 0);
+    ctx.restore();
+    ctx.font = `italic 400 22px ${SERIF}`;
     ctx.fillStyle = 'rgba(224,234,230,0.74)';
-    ctx.fillText(game.reason, VIEW_W / 2, 340);
+    ctx.fillText(game.reason, VIEW_W / 2, 300);
 
-    this.statRow(ctx, VIEW_W / 2, 392, [
+    this.statRow(ctx, VIEW_W / 2, 360, [
       ['GARDEN', `${game.world.index + 1} / 3`],
       ['SCORE', game.player.score.toLocaleString('en-US')],
       ['BEST', Math.max(game.best, game.player.score).toLocaleString('en-US')],
-    ]);
+    ], 16, 32);
 
     const pulse = 0.55 + 0.45 * Math.sin(game.time * 2.6);
-    ctx.font = `600 17px ${SANS}`;
+    ctx.font = `600 40px ${SANS}`;
     ctx.fillStyle = `rgba(255,244,214,${0.5 + pulse * 0.5})`;
-    spacing(ctx, 'PRESS  R  TO  TRY  AGAIN', VIEW_W / 2, 484, 3.6);
+    spacing(ctx, 'PRESS R TO RELIGHT', VIEW_W / 2, 470, 3.6);
     ctx.restore();
   }
 
   // --------------------------------------------------------------- pieces ---
-  plate(ctx, x, y, w, h) {
+  plate(ctx, x, y, w, h, r = 12) {
     ctx.fillStyle = 'rgba(4,12,18,0.55)';
-    this.roundRect(ctx, x, y, w, h, 12);
+    this.roundRect(ctx, x, y, w, h, r);
     ctx.fill();
     ctx.strokeStyle = 'rgba(120,230,208,0.13)';
     ctx.lineWidth = 1;
-    this.roundRect(ctx, x, y, w, h, 12);
+    this.roundRect(ctx, x, y, w, h, r);
     ctx.stroke();
   }
 
@@ -478,15 +681,15 @@ export class Hud {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
-  statRow(ctx, cx, y, items) {
+  statRow(ctx, cx, y, items, labelSize = 10, valueSize = 24) {
     const gap = 190;
     ctx.textAlign = 'center';
     items.forEach(([label, value], i) => {
       const x = cx + (i - (items.length - 1) / 2) * gap;
-      ctx.font = `600 10px ${SANS}`;
+      ctx.font = `600 ${labelSize}px ${SANS}`;
       ctx.fillStyle = 'rgba(170,200,196,0.62)';
       spacing(ctx, label, x, y - 10, 2.6);
-      ctx.font = `700 24px ${SANS}`;
+      ctx.font = `700 ${valueSize}px ${SANS}`;
       ctx.fillStyle = '#f6f2e4';
       ctx.fillText(value, x, y + 16);
     });
@@ -527,9 +730,10 @@ export class Hud {
     ctx.restore();
   }
 
-  heartIcon(ctx, x, y, filled) {
+  heartIcon(ctx, x, y, filled, scale = 1) {
     ctx.save();
     ctx.translate(x, y);
+    ctx.scale(scale, scale);
     ctx.globalAlpha = filled ? 1 : 0.24;
     ctx.fillStyle = filled ? '#ff8f72' : '#7c9290';
     if (filled) {
