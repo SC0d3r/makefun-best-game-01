@@ -1,5 +1,6 @@
 [
-  { "name": "1-gameplay.jpg", "query": "?shot=bloom" },
-  { "name": "2-title.jpg", "query": "?shot=title" },
-  { "name": "3-dawn.jpg", "query": "?shot=victory" }
+  { "name": "1-gameplay.jpg", "query": "?shot=play" },
+  { "name": "2-hub.jpg", "query": "?shot=select" },
+  { "name": "3-draft.jpg", "query": "?shot=draft" },
+  { "name": "4-results.jpg", "query": "?shot=victory" }
 ]
