@@ -31,20 +31,34 @@ export function drawGardenSelect(ctx, game) {
   ctx.save();
   ctx.textBaseline = 'middle';
 
-  // Frame heading, top left.
+  // Header block: the ladder title, then identity and the headline best.
   ctx.textAlign = 'left';
-  ctx.font = `700 34px ${SERIF}`;
-  const titleFill = ctx.createLinearGradient(0, 52, 0, 90);
+  ctx.font = `700 64px ${SERIF}`;
+  const titleFill = ctx.createLinearGradient(0, 64, 0, 128);
   titleFill.addColorStop(0, '#fff8e2');
   titleFill.addColorStop(1, '#f3b967');
   ctx.fillStyle = titleFill;
   ctx.shadowColor = 'rgba(255,208,120,0.4)';
   ctx.shadowBlur = 18;
-  spacing(ctx, 'LUMENWING', 64, 70, 4, 'left');
+  spacing(ctx, 'CHOOSE A GARDEN', 64, 96, 4, 'left');
   ctx.shadowBlur = 0;
-  ctx.font = `600 18px ${SANS}`;
-  ctx.fillStyle = 'rgba(200,240,232,0.7)';
-  spacing(ctx, 'CHOOSE A GARDEN', 66, 104, 3.4, 'left');
+
+  const cleared = Number.isFinite(save.clears) ? save.clears : 0;
+  const best = Number.isFinite(save.best) ? save.best : 0;
+  ctx.font = `600 44px ${SANS}`;
+  ctx.fillStyle = 'rgba(200,240,232,0.72)';
+  spacing(
+    ctx,
+    `LUMENWING  GARDENS AWAKE ${cleared}/${GARDENS.length}`,
+    64,
+    156,
+    1.4,
+    'left',
+  );
+  ctx.textAlign = 'right';
+  ctx.font = `600 30px ${SANS}`;
+  ctx.fillStyle = 'rgba(198,226,220,0.62)';
+  ctx.fillText(`BEST ${best.toLocaleString('en-US')}`, 1216, 156);
 
   for (let index = 0; index < GARDENS.length; index++) {
     const garden = GARDENS[index];
@@ -74,7 +88,7 @@ export function drawGardenSelect(ctx, game) {
     ctx.restore();
 
     // Bright thin edge when open, a thicker warm-gold glow when selected.
-    ctx.lineWidth = isSelected ? 3 : 1.2;
+    ctx.lineWidth = isSelected ? 4 : 1.5;
     ctx.strokeStyle = isSelected
       ? '#ffd685'
       : unlocked
@@ -88,19 +102,27 @@ export function drawGardenSelect(ctx, game) {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Name and subtitle.
+    // The locked card's large lock sits behind the name and note, not over them.
+    if (!unlocked) lockGlyph(ctx, cx, rect.y + 150, 2);
+
+    // Name, shrinking only if it would run past the card's inner width.
+    let nameSize = 60;
+    ctx.font = `700 ${nameSize}px ${SERIF}`;
+    while (nameSize > 44 && ctx.measureText(garden.name).width > rect.w - 64) {
+      nameSize -= 2;
+      ctx.font = `700 ${nameSize}px ${SERIF}`;
+    }
     ctx.textAlign = 'center';
-    ctx.font = `700 30px ${SERIF}`;
     ctx.fillStyle = unlocked ? '#fdf6e4' : 'rgba(226,234,244,0.92)';
     if (unlocked) {
       ctx.shadowColor = 'rgba(255,208,120,0.35)';
       ctx.shadowBlur = 14;
     }
-    ctx.fillText(garden.name, cx, rect.y + 56, rect.w - 32);
+    ctx.fillText(garden.name, cx, rect.y + 78, rect.w - 64);
     ctx.shadowBlur = 0;
-    ctx.font = `400 15px ${SERIF}`;
-    ctx.fillStyle = 'rgba(224,238,232,0.72)';
-    ctx.fillText(garden.subtitle, cx, rect.y + 92, rect.w - 28);
+    ctx.font = `400 26px ${SERIF}`;
+    ctx.fillStyle = 'rgba(224,238,232,0.6)';
+    ctx.fillText(garden.subtitle, cx, rect.y + 126, rect.w - 56);
 
     if (unlocked) {
       // One pip per sunseed the garden asks for.
@@ -108,55 +130,48 @@ export function drawGardenSelect(ctx, game) {
       const pipGap = 26;
       const pipStart = cx - ((need - 1) * pipGap) / 2;
       for (let pip = 0; pip < need; pip++) {
-        seedIcon(ctx, pipStart + pip * pipGap, rect.y + 146, false, garden.accent);
+        seedIcon(ctx, pipStart + pip * pipGap, rect.y + 170, false, garden.accent);
       }
+
+      // One status line: cleared cards carry their best, open cards say OPEN.
+      const cardBest = Number.isFinite(bests[index]) ? bests[index] : 0;
+      const status =
+        save.cleared && save.cleared[index]
+          ? cardBest > 0
+            ? `CLEARED   BEST ${cardBest.toLocaleString('en-US')}`
+            : 'CLEARED'
+          : cardBest > 0
+            ? `OPEN   BEST ${cardBest.toLocaleString('en-US')}`
+            : 'OPEN';
+      ctx.textAlign = 'left';
+      ctx.font = `600 30px ${SANS}`;
+      ctx.fillStyle = 'rgba(206,230,224,0.82)';
+      ctx.fillText(status, rect.x + 28, rect.y + 210, rect.w - 56);
     } else {
-      lockGlyph(ctx, cx, rect.y + 164);
       ctx.textAlign = 'center';
-      ctx.font = `600 14px ${SANS}`;
+      ctx.font = `600 30px ${SANS}`;
       ctx.fillStyle = 'rgba(240,224,200,0.86)';
       const earlier = index > 0 ? GARDENS[index - 1].name : 'the first garden';
       const note = garden.lockNote || `Wake ${earlier}`;
-      ctx.fillText(note, cx, rect.y + 224, rect.w - 36);
+      ctx.fillText(`LOCKED   ${note}`, cx, rect.y + 210, rect.w - 56);
     }
-
-    // Per-garden best, read straight from the save.
-    const best = Number.isFinite(bests[index]) ? bests[index] : 0;
-    ctx.textAlign = 'center';
-    ctx.font = `600 15px ${SANS}`;
-    ctx.fillStyle = unlocked ? 'rgba(206,230,224,0.82)' : 'rgba(206,230,224,0.6)';
-    spacing(ctx, `BEST ${best.toLocaleString('en-US')}`, cx, rect.y + 258, 2.2);
 
     ctx.restore();
   }
 
-  // Save summary under the row of cards, then the one control line.
-  const runs = Number.isFinite(save.runs) ? save.runs : 0;
-  const clears = Number.isFinite(save.clears) ? save.clears : 0;
-  const best = Number.isFinite(save.best) ? save.best : 0;
-  ctx.textAlign = 'center';
-  ctx.font = `600 13px ${SANS}`;
-  ctx.fillStyle = 'rgba(198,226,220,0.62)';
-  spacing(
-    ctx,
-    `RUNS ${runs}   CLEARS ${clears}   BEST ${best.toLocaleString('en-US')}`,
-    VIEW_W / 2,
-    556,
-    2.4,
-  );
-
-  ctx.font = `600 18px ${SANS}`;
+  ctx.font = `600 24px ${SANS}`;
   ctx.fillStyle = 'rgba(255,236,200,0.9)';
+  ctx.textAlign = 'left';
 
-  // With a draft open the panel owns the screen; the map-only control line and
-  // its footer stay out from under it.
+  // With a draft open the panel owns the screen; the map-only control line
+  // stays out from under it.
   if (game.draft) {
     ctx.restore();
     drawDraft(ctx, game);
     return;
   }
 
-  spacing(ctx, 'ARROWS  CHOOSE      ENTER  FLY', VIEW_W / 2, 664, 2.6);
+  spacing(ctx, 'ARROWS CHOOSE     ENTER FLY', 64, 706, 2.6, 'left');
 
   ctx.restore();
 }
@@ -167,23 +182,23 @@ export function drawVictory(ctx, game) {
   const t = game.time;
 
   // The results card: near opaque, 2 px edge, soft outer shadow.
-  const cardX = 300;
-  const cardY = 96;
-  const cardW = 680;
-  const cardH = 536;
+  const cardX = 260;
+  const cardY = 60;
+  const cardW = 760;
+  const cardH = 600;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.65)';
   ctx.shadowBlur = 46;
   ctx.shadowOffsetY = 18;
   ctx.fillStyle = 'rgba(4,12,18,0.94)';
-  roundRect(ctx, cardX, cardY, cardW, cardH, 22);
+  roundRect(ctx, cardX, cardY, cardW, cardH, 24);
   ctx.fill();
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
   ctx.strokeStyle = 'rgba(255,220,150,0.55)';
   ctx.lineWidth = 2;
-  roundRect(ctx, cardX, cardY, cardW, cardH, 22);
+  roundRect(ctx, cardX, cardY, cardW, cardH, 24);
   ctx.stroke();
   ctx.restore();
 
@@ -191,12 +206,12 @@ export function drawVictory(ctx, game) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // A little warm bokeh behind the header.
+  // A little warm bokeh behind the heading.
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * TAU + t * 0.1;
     const r = 118 + Math.sin(t * 0.9 + i) * 10;
     const x = cx + Math.cos(a) * r * 1.55;
-    const y = 196 + Math.sin(a) * r * 0.52;
+    const y = 156 + Math.sin(a) * r * 0.52;
     const glow = ctx.createRadialGradient(x, y, 0, x, y, 16);
     glow.addColorStop(0, 'rgba(255,236,168,0.4)');
     glow.addColorStop(1, 'rgba(255,210,120,0)');
@@ -210,94 +225,134 @@ export function drawVictory(ctx, game) {
   ctx.fillStyle = '#fff8e2';
   ctx.shadowColor = 'rgba(255,208,120,0.55)';
   ctx.shadowBlur = 24;
-  spacing(ctx, 'RUN COMPLETE', cx, 146, 5);
+  spacing(ctx, 'RUN COMPLETE', cx, 96, 5);
   ctx.shadowBlur = 0;
 
   ctx.font = `700 84px ${SERIF}`;
-  const gold = ctx.createLinearGradient(0, 174, 0, 254);
+  const gold = ctx.createLinearGradient(0, 114, 0, 198);
   gold.addColorStop(0, '#fffbe8');
   gold.addColorStop(1, '#f2c274');
   ctx.fillStyle = gold;
   ctx.shadowColor = 'rgba(255,208,120,0.6)';
   ctx.shadowBlur = 32;
-  spacing(ctx, 'DAWN BREAKS', cx, 214, 2);
+  spacing(ctx, 'DAWN BREAKS', cx, 156, 2);
   ctx.shadowBlur = 0;
 
-  ctx.font = `italic 400 22px ${SERIF}`;
-  ctx.fillStyle = 'rgba(230,242,236,0.72)';
-  ctx.fillText('The lantern moth carried the morning through the dark.', cx, 278);
+  // Top-right fine print: motes are the run's quiet collectible.
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = `600 28px ${SANS}`;
+  ctx.fillStyle = 'rgba(190,218,212,0.6)';
+  ctx.fillText(`MOTES ${(game.stats && game.stats.motes) || 0}`, 968, 100);
 
-  // Stats card with the score as the one hero number.
-  const statX = 360;
-  const statY = 292;
-  const statW = 560;
-  const statH = 220;
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.55)';
-  ctx.shadowBlur = 28;
-  ctx.shadowOffsetY = 8;
-  ctx.fillStyle = 'rgba(2,7,12,0.91)';
-  roundRect(ctx, statX, statY, statW, statH, 16);
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = 'rgba(255,220,150,0.34)';
-  ctx.lineWidth = 2;
-  roundRect(ctx, statX, statY, statW, statH, 16);
+  // Warm rules: full width above and below, a short one under the score.
+  ctx.strokeStyle = 'rgba(255,220,150,0.32)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(300, 212);
+  ctx.lineTo(980, 212);
+  ctx.moveTo(300, 548);
+  ctx.lineTo(980, 548);
+  ctx.moveTo(600, 346);
+  ctx.lineTo(960, 346);
   ctx.stroke();
-  ctx.restore();
 
-  ctx.font = `600 16px ${SANS}`;
-  ctx.fillStyle = 'rgba(180,214,208,0.8)';
-  spacing(ctx, 'SCORE', cx, statY + 22, 3);
-  ctx.font = `700 60px ${SANS}`;
-  ctx.fillStyle = '#fff8e2';
-  ctx.shadowColor = 'rgba(255,208,120,0.45)';
+  // Grade medallion in the left column.
+  const medalX = 396;
+  const medalY = 326;
+  const medalR = 86;
+  ctx.textAlign = 'center';
+  ctx.font = `600 24px ${SANS}`;
+  ctx.fillStyle = 'rgba(178,210,204,0.62)';
+  spacing(ctx, 'GRADE', medalX, 232, 4);
+
+  ctx.fillStyle = 'rgba(10,22,28,0.9)';
+  ctx.beginPath();
+  ctx.arc(medalX, medalY, medalR, 0, TAU);
+  ctx.fill();
+  const inner = ctx.createRadialGradient(medalX, medalY, medalR * 0.42, medalX, medalY, medalR);
+  inner.addColorStop(0, 'rgba(255,214,133,0)');
+  inner.addColorStop(0.72, 'rgba(255,214,133,0.08)');
+  inner.addColorStop(1, 'rgba(255,214,133,0.3)');
+  ctx.fillStyle = inner;
+  ctx.beginPath();
+  ctx.arc(medalX, medalY, medalR, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,214,133,0.92)';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = 'rgba(255,208,120,0.5)';
   ctx.shadowBlur = 18;
-  ctx.fillText(game.player.score.toLocaleString('en-US'), cx, statY + 76);
+  ctx.beginPath();
+  ctx.arc(medalX, medalY, medalR, 0, TAU);
+  ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // A compact tally of everything the run gathered, one row per line.
-  const stats = game.stats || {};
-  const rows = [
-    ['SUNSEEDS', `${stats.seeds || 0}`],
-    ['MOTES', `${stats.motes || 0}`],
-    ['GARDENS', `${stats.gardens || 0}/${GARDENS.length}`],
-    ['RUN', `${Math.round(game.elapsed)}s`],
-  ];
-  const rowX = statX + 40;
-  const rowRight = statX + statW - 40;
-  let rowY = statY + 102;
-  for (const [label, value] of rows) {
-    ctx.textAlign = 'left';
-    ctx.font = `600 13px ${SANS}`;
-    ctx.fillStyle = 'rgba(170,200,196,0.7)';
-    ctx.fillText(label, rowX, rowY);
-    ctx.textAlign = 'right';
-    ctx.font = `700 15px ${SANS}`;
-    ctx.fillStyle = '#f6f2e4';
-    ctx.fillText(value, rowRight, rowY);
-    rowY += 23;
+  const score = Number.isFinite(game.player && game.player.score) ? game.player.score : 0;
+  const grade =
+    score >= 14000 ? 'S' : score >= 10500 ? 'A' : score >= 7500 ? 'B' : score >= 5000 ? 'C' : 'D';
+  const gradeFill = ctx.createLinearGradient(0, medalY - 64, 0, medalY + 64);
+  gradeFill.addColorStop(0, '#fffbe8');
+  gradeFill.addColorStop(0.55, '#ffe3a8');
+  gradeFill.addColorStop(1, '#f2b45c');
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 128px ${SERIF}`;
+  ctx.fillStyle = gradeFill;
+  ctx.fillText(grade, medalX, medalY + 2);
+
+  // Best run, directly under the medallion.
+  if (game.newBest) {
+    ctx.font = `700 46px ${SANS}`;
+    ctx.fillStyle = '#ffd685';
+    ctx.shadowColor = 'rgba(255,208,120,0.55)';
+    ctx.shadowBlur = 18;
+    ctx.fillText('NEW BEST', medalX, 456);
+    ctx.shadowBlur = 0;
+  } else {
+    const best = Number.isFinite(game.best) ? game.best : 0;
+    ctx.font = `600 34px ${SANS}`;
+    ctx.fillStyle = 'rgba(190,218,212,0.68)';
+    ctx.fillText(`BEST ${best.toLocaleString('en-US')}`, medalX, 456);
   }
 
-  const timeBestX = [cx - 118, cx + 118];
-  const bestText = game.best > game.player.score ? game.best.toLocaleString('en-US') : 'NEW';
+  // Score block in the right column.
+  const colX = 780;
   ctx.textAlign = 'center';
-  ctx.font = `600 12px ${SANS}`;
-  ctx.fillStyle = 'rgba(180,214,208,0.72)';
-  spacing(ctx, 'TIME', timeBestX[0], statY + 192, 2.4);
-  spacing(ctx, 'BEST', timeBestX[1], statY + 192, 2.4);
-  ctx.font = `700 22px ${SANS}`;
-  ctx.fillStyle = '#f6f2e4';
-  ctx.fillText(formatTime(game.elapsed), timeBestX[0], statY + 210);
-  ctx.fillText(bestText, timeBestX[1], statY + 210);
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = `600 24px ${SANS}`;
+  ctx.fillStyle = 'rgba(178,210,204,0.62)';
+  spacing(ctx, 'SCORE', colX, 248, 4);
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 72px ${SANS}`;
+  ctx.fillStyle = '#fff8e2';
+  ctx.shadowColor = 'rgba(255,208,120,0.45)';
+  ctx.shadowBlur = 20;
+  ctx.fillText(score.toLocaleString('en-US'), colX, 314);
+  ctx.shadowBlur = 0;
+
+  // Three tall stat rows under the score.
+  const stats = game.stats || {};
+  const statRows = [
+    ['SUNSEEDS', `${stats.seeds || 0}`, 402],
+    ['GARDENS', `${stats.gardens || 0}/${GARDENS.length}`, 458],
+    ['TIME', formatTime(game.elapsed), 514],
+  ];
+  ctx.textBaseline = 'alphabetic';
+  for (const [label, value, baseline] of statRows) {
+    ctx.textAlign = 'left';
+    ctx.font = `600 26px ${SANS}`;
+    ctx.fillStyle = 'rgba(178,210,204,0.66)';
+    ctx.fillText(label, 600, baseline);
+    ctx.textAlign = 'right';
+    ctx.font = `700 64px ${SANS}`;
+    ctx.fillStyle = '#f6f2e4';
+    ctx.fillText(value, 960, baseline);
+  }
 
   // Restart pill with a key glyph, the only prompt on the screen.
-  const pillW = 620;
-  const pillH = 96;
-  const pillX = cx - pillW / 2;
-  const pillY = 520;
+  const pillW = 640;
+  const pillH = 80;
+  const pillX = 320;
+  const pillY = 570;
   const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
   ctx.save();
   ctx.shadowColor = `rgba(255,205,110,${0.22 + pulse * 0.14})`;
@@ -315,27 +370,28 @@ export function drawVictory(ctx, game) {
   ctx.stroke();
   ctx.restore();
 
-  ctx.font = `600 44px ${SANS}`;
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 72px ${SANS}`;
   const label = 'FLY AGAIN';
   const labelW = ctx.measureText(label).width;
-  const keyW = 44;
-  const gap = 16;
+  const keyW = 64;
+  const gap = 18;
   const startX = cx - (keyW + gap + labelW) / 2;
   ctx.fillStyle = 'rgba(255,222,150,0.12)';
-  roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 8);
+  roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 10);
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,222,150,0.8)';
   ctx.lineWidth = 1.2;
-  roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 8);
+  roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 10);
   ctx.stroke();
   ctx.textAlign = 'center';
-  ctx.font = `700 26px ${SANS}`;
+  ctx.font = `700 36px ${SANS}`;
   ctx.fillStyle = '#fff4d8';
   ctx.fillText('R', startX + keyW / 2, pillY + pillH / 2 + 1);
   ctx.textAlign = 'left';
-  ctx.font = `600 44px ${SANS}`;
+  ctx.font = `700 72px ${SANS}`;
   ctx.fillStyle = '#fff8ec';
-  ctx.fillText(label, startX + keyW + gap, pillY + pillH / 2 + 1);
+  ctx.fillText(label, startX + keyW + gap, pillY + pillH / 2 + 2);
 
   ctx.restore();
 }
@@ -417,7 +473,7 @@ export function drawDraft(ctx, game) {
 
     seedIcon(ctx, cx, cardY + 206, true, '#ffd685');
 
-    ctx.font = `700 40px ${SANS}`;
+    ctx.font = `700 64px ${SANS}`;
     if (affordable) {
       ctx.fillStyle = '#ffe9ad';
       ctx.fillText(`COST ${offer.cost}`, cx, cardY + 246);
@@ -429,7 +485,7 @@ export function drawDraft(ctx, game) {
     ctx.restore();
   }
 
-  ctx.font = `700 56px ${SERIF}`;
+  ctx.font = `700 64px ${SERIF}`;
   ctx.fillStyle = game.draftFlash > 0 ? '#ff9b86' : '#fff1cf';
   if (game.draftFlash > 0) {
     ctx.shadowBlur = 0;
@@ -503,36 +559,46 @@ export function drawTitle(ctx, game) {
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  ctx.font = `italic 400 26px ${SERIF}`;
-  ctx.fillStyle = 'rgba(232,244,238,0.88)';
-  ctx.fillText('Fly a lantern moth. Gather sunseeds, wake moonflowers, keep your light.', VIEW_W / 2, 308);
+  // Two literal objectives, read as the rules of the run rather than flavour.
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = `600 58px ${SANS}`;
+  ctx.fillStyle = '#ffdf9c';
+  ctx.shadowColor = 'rgba(255,208,120,0.45)';
+  ctx.shadowBlur = 18;
+  spacing(ctx, 'GOAL: WAKE FOUR GARDENS', VIEW_W / 2, 336, 1.6);
+  ctx.shadowBlur = 0;
+  ctx.font = `600 58px ${SANS}`;
+  ctx.fillStyle = '#ff9b86';
+  spacing(ctx, 'LOSE: LIGHT RUNS OUT', VIEW_W / 2, 404, 1.6);
+
+  ctx.font = `400 34px ${SERIF}`;
+  ctx.fillStyle = 'rgba(255,242,214,0.9)';
+  spacing(ctx, 'EIGHT UPGRADES   PROGRESS SAVES EVERY CLEAR', VIEW_W / 2, 466, 1.2);
 
   // Controls: one quiet line on a wide plate.
+  ctx.textBaseline = 'middle';
   const controlsText = 'ARROWS FLY     SPACE PULSE     P PAUSE / M MUTE';
-  let controlsSize = 22;
-  ctx.font = `600 ${controlsSize}px ${SANS}`;
-  if (trackedWidth(ctx, controlsText, 2.2) > 720) controlsSize = 20;
   ctx.fillStyle = 'rgba(6,16,24,0.66)';
-  roundRect(ctx, 260, 396, 760, 60, 14);
+  roundRect(ctx, 260, 492, 760, 56, 14);
   ctx.fill();
   ctx.strokeStyle = 'rgba(120,230,208,0.22)';
   ctx.lineWidth = 1;
-  roundRect(ctx, 260, 396, 760, 60, 14);
+  roundRect(ctx, 260, 492, 760, 56, 14);
   ctx.stroke();
   ctx.textAlign = 'center';
-  ctx.font = `600 ${controlsSize}px ${SANS}`;
+  ctx.font = `600 24px ${SANS}`;
   ctx.fillStyle = 'rgba(255,236,200,0.92)';
-  spacing(ctx, controlsText, VIEW_W / 2, 426, 2.2);
+  spacing(ctx, controlsText, VIEW_W / 2, 520, 2.2);
 
   // The game's second noun, level with the control card on the right.
-  drawTitleMoonflower(ctx, 1060, 470, t, 36);
+  drawTitleMoonflower(ctx, 1150, 330, t, 36);
 
   // Start button, pushed down so it separates from the controls card.
   const pulse = 0.5 + 0.5 * Math.sin(t * 1.8);
   const pillW = 560;
   const pillH = 76;
   const pillX = VIEW_W / 2 - pillW / 2;
-  const pillY = 560;
+  const pillY = 566;
   ctx.save();
   ctx.shadowColor = `rgba(255,208,120,${0.2 + pulse * 0.16})`;
   ctx.shadowBlur = 26;
@@ -550,7 +616,7 @@ export function drawTitle(ctx, game) {
   ctx.restore();
 
   ctx.textAlign = 'center';
-  ctx.font = `600 32px ${SANS}`;
+  ctx.font = `600 40px ${SANS}`;
   ctx.fillStyle = '#fff9ec';
   const textW = spacing(ctx, 'PRESS ENTER TO WAKE', VIEW_W / 2, pillY + pillH / 2, 3.2);
   ctx.strokeStyle = `rgba(255,214,130,${0.25 + pulse * 0.45})`;
@@ -561,14 +627,11 @@ export function drawTitle(ctx, game) {
   ctx.stroke();
 
   if (game.best > 0) {
-    ctx.font = `500 20px ${SANS}`;
+    ctx.font = `500 26px ${SANS}`;
     ctx.fillStyle = 'rgba(198,226,220,0.55)';
-    spacing(ctx, `BEST FLIGHT  ${game.best.toLocaleString('en-US')}`, VIEW_W / 2, 672, 3);
+    spacing(ctx, `BEST FLIGHT  ${game.best.toLocaleString('en-US')}`, VIEW_W / 2, 688, 3);
   }
 
-  ctx.font = `500 18px ${SANS}`;
-  ctx.fillStyle = 'rgba(180,206,200,0.4)';
-  spacing(ctx, 'I  DEWGLASS     II  EMBERFALL     III  FROSTBLOOM', VIEW_W / 2, 698, 2.4);
   ctx.restore();
 }
 
@@ -746,8 +809,8 @@ export function drawPause(ctx, game) {
 /** Where the four garden cards sit on the select screen. */
 export function gardenCardRect(index) {
   return {
-    x: CARD_START_X + index * (CARD_W + CARD_GAP),
-    y: CARD_Y,
+    x: CARD_START_X + (index % 2) * (CARD_W + CARD_GAP),
+    y: index < 2 ? 196 : 460,
     w: CARD_W,
     h: CARD_H,
   };
@@ -780,10 +843,16 @@ export function spacing(ctx, text, x, y, gap, align = 'center') {
   const widths = chars.map((c) => ctx.measureText(c).width);
   const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
   let cursor = align === 'center' ? x - total / 2 : align === 'right' ? x - total : x;
+  // Per-character drawing must be centred on each cell, whatever alignment the
+  // caller uses for single fillText calls, or left-aligned runs overlap by half
+  // a glyph (the hub identity line lost its I this way).
+  const prevAlign = ctx.textAlign;
+  ctx.textAlign = 'center';
   for (let i = 0; i < chars.length; i++) {
     ctx.fillText(chars[i], cursor + widths[i] / 2, y);
     cursor += widths[i] + gap;
   }
+  ctx.textAlign = prevAlign;
   return total;
 }
 
@@ -923,29 +992,30 @@ export function roundRect(ctx, x, y, w, h, r) {
 export const SERIF = 'Georgia, "Iowan Old Style", "Palatino Linotype", serif';
 export const SANS = '"Trebuchet MS", "Segoe UI", system-ui, sans-serif';
 
-const CARD_W = 272;
-const CARD_H = 300;
-const CARD_Y = 216;
-const CARD_GAP = 24;
-const CARD_START_X = 60;
+const CARD_W = 560;
+const CARD_H = 232;
+const CARD_GAP = 32;
+const CARD_START_X = 64;
 
-function lockGlyph(ctx, x, y) {
+function lockGlyph(ctx, x, y, scale = 1) {
   ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
   ctx.strokeStyle = 'rgba(255,226,168,0.8)';
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(x, y - 18, 16, Math.PI, 0);
+  ctx.arc(0, -18, 16, Math.PI, 0);
   ctx.stroke();
   ctx.fillStyle = 'rgba(255,226,168,0.14)';
-  roundRect(ctx, x - 22, y - 18, 44, 38, 8);
+  roundRect(ctx, -22, -18, 44, 38, 8);
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,226,168,0.85)';
   ctx.lineWidth = 2;
-  roundRect(ctx, x - 22, y - 18, 44, 38, 8);
+  roundRect(ctx, -22, -18, 44, 38, 8);
   ctx.stroke();
   ctx.fillStyle = 'rgba(255,226,168,0.9)';
   ctx.beginPath();
-  ctx.arc(x, y + 2, 4, 0, TAU);
+  ctx.arc(0, 2, 4, 0, TAU);
   ctx.fill();
   ctx.restore();
 }
