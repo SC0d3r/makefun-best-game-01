@@ -7,17 +7,19 @@
 // call: world, player, bats, particles, camera, counters and presentation
 // timers all live on this object.
 
-import { World, caveCenter, VIEW_W, VIEW_H } from './world.js';
-import { Player } from './player.js';
-import { Bat, Particles } from './creatures.js';
-import { Renderer } from './render.js';
-import { Hud, Audio } from './hud.js';
-import { clamp, formatTime, GARDENS } from './gardens.js';
 import { loadSave, writeSave, recordRun, isGardenUnlocked } from './save.js';
 import { newRunStats, tally, gardenCardRect } from './screens.js';
+import { clamp, formatTime, GARDENS } from './gardens.js';
+import { World, caveCenter, VIEW_W, VIEW_H } from './world.js';
+import { Player } from './player.js';
+import { Hud, Audio } from './hud.js';
+import { Bat, Particles } from './creatures.js';
+import { Renderer } from './render.js';
 
 export class Game {
-  constructor(canvas) {
+  constructor(
+    canvas,
+  ) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.input = new Input(window);

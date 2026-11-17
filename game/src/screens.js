@@ -6,6 +6,152 @@ import { VIEW_W, VIEW_H } from './world.js';
 import { GARDENS } from './gardens.js';
 import { isGardenUnlocked } from './save.js';
 
+// --------------------------------------------------------- garden select ---
+
+export function drawGardenSelect(ctx, game) {
+  const t = game.time;
+  const save = game.save || {};
+  const bests = Array.isArray(save.bests) ? save.bests : [];
+  const selected = Number.isInteger(game.selectedGarden) ? game.selectedGarden : 0;
+
+  // The same dark, warm-edged backdrop as the title, with no extra decoration.
+  const veilGrad = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+  veilGrad.addColorStop(0, 'rgba(2,6,14,0.72)');
+  veilGrad.addColorStop(0.45, 'rgba(2,8,16,0.6)');
+  veilGrad.addColorStop(1, 'rgba(1,4,9,0.9)');
+  ctx.fillStyle = veilGrad;
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  const beam = ctx.createRadialGradient(150, 90, 10, 150, 90, 560);
+  beam.addColorStop(0, `rgba(255,214,133,${0.08 + Math.sin(t * 0.7) * 0.02})`);
+  beam.addColorStop(1, 'rgba(255,180,80,0)');
+  ctx.fillStyle = beam;
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  ctx.save();
+  ctx.textBaseline = 'middle';
+
+  // Frame heading, top left.
+  ctx.textAlign = 'left';
+  ctx.font = `700 34px ${SERIF}`;
+  const titleFill = ctx.createLinearGradient(0, 52, 0, 90);
+  titleFill.addColorStop(0, '#fff8e2');
+  titleFill.addColorStop(1, '#f3b967');
+  ctx.fillStyle = titleFill;
+  ctx.shadowColor = 'rgba(255,208,120,0.4)';
+  ctx.shadowBlur = 18;
+  spacing(ctx, 'LUMENWING', 64, 70, 4, 'left');
+  ctx.shadowBlur = 0;
+  ctx.font = `600 18px ${SANS}`;
+  ctx.fillStyle = 'rgba(200,240,232,0.7)';
+  spacing(ctx, 'CHOOSE A GARDEN', 66, 104, 3.4, 'left');
+
+  for (let index = 0; index < GARDENS.length; index++) {
+    const garden = GARDENS[index];
+    const rect = gardenCardRect(index);
+    const unlocked = isGardenUnlocked(save, index);
+    const isSelected = unlocked && index === selected;
+    const cx = rect.x + rect.w / 2;
+
+    ctx.save();
+    if (!unlocked) ctx.globalAlpha = 0.45;
+
+    // Card body, then a restrained wash of the garden's own palette.
+    ctx.fillStyle = 'rgba(4,12,18,0.8)';
+    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 16);
+    ctx.fill();
+
+    ctx.save();
+    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 16);
+    ctx.clip();
+    ctx.globalAlpha *= 0.3;
+    const wash = ctx.createLinearGradient(0, rect.y, 0, rect.y + rect.h);
+    wash.addColorStop(0, garden.bgBottom);
+    wash.addColorStop(0.7, garden.bgTop);
+    wash.addColorStop(1, 'rgba(4,12,18,0)');
+    ctx.fillStyle = wash;
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.restore();
+
+    // Bright thin edge when open, a thicker warm-gold glow when selected.
+    ctx.lineWidth = isSelected ? 3 : 1.2;
+    ctx.strokeStyle = isSelected
+      ? '#ffd685'
+      : unlocked
+        ? 'rgba(255,226,150,0.5)'
+        : 'rgba(170,195,205,0.32)';
+    if (isSelected) {
+      ctx.shadowColor = 'rgba(255,208,120,0.7)';
+      ctx.shadowBlur = 24;
+    }
+    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 16);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Name and subtitle.
+    ctx.textAlign = 'center';
+    ctx.font = `700 30px ${SERIF}`;
+    ctx.fillStyle = unlocked ? '#fdf6e4' : 'rgba(226,234,244,0.92)';
+    if (unlocked) {
+      ctx.shadowColor = 'rgba(255,208,120,0.35)';
+      ctx.shadowBlur = 14;
+    }
+    ctx.fillText(garden.name, cx, rect.y + 56, rect.w - 32);
+    ctx.shadowBlur = 0;
+    ctx.font = `400 15px ${SERIF}`;
+    ctx.fillStyle = 'rgba(224,238,232,0.72)';
+    ctx.fillText(garden.subtitle, cx, rect.y + 92, rect.w - 28);
+
+    if (unlocked) {
+      // One pip per sunseed the garden asks for.
+      const need = garden.seeds;
+      const pipGap = 26;
+      const pipStart = cx - ((need - 1) * pipGap) / 2;
+      for (let pip = 0; pip < need; pip++) {
+        seedIcon(ctx, pipStart + pip * pipGap, rect.y + 146, false, garden.accent);
+      }
+    } else {
+      lockGlyph(ctx, cx, rect.y + 164);
+      ctx.textAlign = 'center';
+      ctx.font = `600 14px ${SANS}`;
+      ctx.fillStyle = 'rgba(240,224,200,0.86)';
+      const earlier = index > 0 ? GARDENS[index - 1].name : 'the first garden';
+      const note = garden.lockNote || `Wake ${earlier}`;
+      ctx.fillText(note, cx, rect.y + 224, rect.w - 36);
+    }
+
+    // Per-garden best, read straight from the save.
+    const best = Number.isFinite(bests[index]) ? bests[index] : 0;
+    ctx.textAlign = 'center';
+    ctx.font = `600 15px ${SANS}`;
+    ctx.fillStyle = unlocked ? 'rgba(206,230,224,0.82)' : 'rgba(206,230,224,0.6)';
+    spacing(ctx, `BEST ${best.toLocaleString('en-US')}`, cx, rect.y + 258, 2.2);
+
+    ctx.restore();
+  }
+
+  // Save summary under the row of cards, then the one control line.
+  const runs = Number.isFinite(save.runs) ? save.runs : 0;
+  const clears = Number.isFinite(save.clears) ? save.clears : 0;
+  const best = Number.isFinite(save.best) ? save.best : 0;
+  ctx.textAlign = 'center';
+  ctx.font = `600 13px ${SANS}`;
+  ctx.fillStyle = 'rgba(198,226,220,0.62)';
+  spacing(
+    ctx,
+    `RUNS ${runs}   CLEARS ${clears}   BEST ${best.toLocaleString('en-US')}`,
+    VIEW_W / 2,
+    556,
+    2.4,
+  );
+
+  ctx.font = `600 18px ${SANS}`;
+  ctx.fillStyle = 'rgba(255,236,200,0.9)';
+  spacing(ctx, 'ARROWS  CHOOSE      ENTER  FLY', VIEW_W / 2, 664, 2.6);
+
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- title ---
 export function drawTitle(ctx, game) {
   const t = game.time;
@@ -478,152 +624,6 @@ export function drawPause(ctx, game) {
   ctx.fillStyle = 'rgba(198,226,220,0.5)';
   ctx.font = `400 13px ${SANS}`;
   ctx.fillText('Garden progress and score are kept while paused.', VIEW_W / 2, 478);
-  ctx.restore();
-}
-
-// --------------------------------------------------------- garden select ---
-
-export function drawGardenSelect(ctx, game) {
-  const t = game.time;
-  const save = game.save || {};
-  const bests = Array.isArray(save.bests) ? save.bests : [];
-  const selected = Number.isInteger(game.selectedGarden) ? game.selectedGarden : 0;
-
-  // The same dark, warm-edged backdrop as the title, with no extra decoration.
-  const veilGrad = ctx.createLinearGradient(0, 0, 0, VIEW_H);
-  veilGrad.addColorStop(0, 'rgba(2,6,14,0.72)');
-  veilGrad.addColorStop(0.45, 'rgba(2,8,16,0.6)');
-  veilGrad.addColorStop(1, 'rgba(1,4,9,0.9)');
-  ctx.fillStyle = veilGrad;
-  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-
-  const beam = ctx.createRadialGradient(150, 90, 10, 150, 90, 560);
-  beam.addColorStop(0, `rgba(255,214,133,${0.08 + Math.sin(t * 0.7) * 0.02})`);
-  beam.addColorStop(1, 'rgba(255,180,80,0)');
-  ctx.fillStyle = beam;
-  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-
-  ctx.save();
-  ctx.textBaseline = 'middle';
-
-  // Frame heading, top left.
-  ctx.textAlign = 'left';
-  ctx.font = `700 34px ${SERIF}`;
-  const titleFill = ctx.createLinearGradient(0, 52, 0, 90);
-  titleFill.addColorStop(0, '#fff8e2');
-  titleFill.addColorStop(1, '#f3b967');
-  ctx.fillStyle = titleFill;
-  ctx.shadowColor = 'rgba(255,208,120,0.4)';
-  ctx.shadowBlur = 18;
-  spacing(ctx, 'LUMENWING', 64, 70, 4, 'left');
-  ctx.shadowBlur = 0;
-  ctx.font = `600 18px ${SANS}`;
-  ctx.fillStyle = 'rgba(200,240,232,0.7)';
-  spacing(ctx, 'CHOOSE A GARDEN', 66, 104, 3.4, 'left');
-
-  for (let index = 0; index < GARDENS.length; index++) {
-    const garden = GARDENS[index];
-    const rect = gardenCardRect(index);
-    const unlocked = isGardenUnlocked(save, index);
-    const isSelected = unlocked && index === selected;
-    const cx = rect.x + rect.w / 2;
-
-    ctx.save();
-    if (!unlocked) ctx.globalAlpha = 0.45;
-
-    // Card body, then a restrained wash of the garden's own palette.
-    ctx.fillStyle = 'rgba(4,12,18,0.8)';
-    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 16);
-    ctx.fill();
-
-    ctx.save();
-    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 16);
-    ctx.clip();
-    ctx.globalAlpha *= 0.3;
-    const wash = ctx.createLinearGradient(0, rect.y, 0, rect.y + rect.h);
-    wash.addColorStop(0, garden.bgBottom);
-    wash.addColorStop(0.7, garden.bgTop);
-    wash.addColorStop(1, 'rgba(4,12,18,0)');
-    ctx.fillStyle = wash;
-    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-    ctx.restore();
-
-    // Bright thin edge when open, a thicker warm-gold glow when selected.
-    ctx.lineWidth = isSelected ? 3 : 1.2;
-    ctx.strokeStyle = isSelected
-      ? '#ffd685'
-      : unlocked
-        ? 'rgba(255,226,150,0.5)'
-        : 'rgba(170,195,205,0.32)';
-    if (isSelected) {
-      ctx.shadowColor = 'rgba(255,208,120,0.7)';
-      ctx.shadowBlur = 24;
-    }
-    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 16);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Name and subtitle.
-    ctx.textAlign = 'center';
-    ctx.font = `700 30px ${SERIF}`;
-    ctx.fillStyle = unlocked ? '#fdf6e4' : 'rgba(226,234,244,0.92)';
-    if (unlocked) {
-      ctx.shadowColor = 'rgba(255,208,120,0.35)';
-      ctx.shadowBlur = 14;
-    }
-    ctx.fillText(garden.name, cx, rect.y + 56, rect.w - 32);
-    ctx.shadowBlur = 0;
-    ctx.font = `400 15px ${SERIF}`;
-    ctx.fillStyle = 'rgba(224,238,232,0.72)';
-    ctx.fillText(garden.subtitle, cx, rect.y + 92, rect.w - 28);
-
-    if (unlocked) {
-      // One pip per sunseed the garden asks for.
-      const need = garden.seeds;
-      const pipGap = 26;
-      const pipStart = cx - ((need - 1) * pipGap) / 2;
-      for (let pip = 0; pip < need; pip++) {
-        seedIcon(ctx, pipStart + pip * pipGap, rect.y + 146, false, garden.accent);
-      }
-    } else {
-      lockGlyph(ctx, cx, rect.y + 164);
-      ctx.textAlign = 'center';
-      ctx.font = `600 14px ${SANS}`;
-      ctx.fillStyle = 'rgba(240,224,200,0.86)';
-      const earlier = index > 0 ? GARDENS[index - 1].name : 'the first garden';
-      const note = garden.lockNote || `Wake ${earlier}`;
-      ctx.fillText(note, cx, rect.y + 224, rect.w - 36);
-    }
-
-    // Per-garden best, read straight from the save.
-    const best = Number.isFinite(bests[index]) ? bests[index] : 0;
-    ctx.textAlign = 'center';
-    ctx.font = `600 15px ${SANS}`;
-    ctx.fillStyle = unlocked ? 'rgba(206,230,224,0.82)' : 'rgba(206,230,224,0.6)';
-    spacing(ctx, `BEST ${best.toLocaleString('en-US')}`, cx, rect.y + 258, 2.2);
-
-    ctx.restore();
-  }
-
-  // Save summary under the row of cards, then the one control line.
-  const runs = Number.isFinite(save.runs) ? save.runs : 0;
-  const clears = Number.isFinite(save.clears) ? save.clears : 0;
-  const best = Number.isFinite(save.best) ? save.best : 0;
-  ctx.textAlign = 'center';
-  ctx.font = `600 13px ${SANS}`;
-  ctx.fillStyle = 'rgba(198,226,220,0.62)';
-  spacing(
-    ctx,
-    `RUNS ${runs}   CLEARS ${clears}   BEST ${best.toLocaleString('en-US')}`,
-    VIEW_W / 2,
-    556,
-    2.4,
-  );
-
-  ctx.font = `600 18px ${SANS}`;
-  ctx.fillStyle = 'rgba(255,236,200,0.9)';
-  spacing(ctx, 'ARROWS  CHOOSE      ENTER  FLY', VIEW_W / 2, 664, 2.6);
-
   ctx.restore();
 }
 

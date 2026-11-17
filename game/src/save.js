@@ -11,6 +11,35 @@ export function isGardenUnlocked(save, index) {
   return false;
 }
 
+/** Fold one finished run into a new save without mutating the old one. */
+export function recordRun(save, { score, total, gardenIndex, cleared, campaignCleared, seeds, motes }) {
+  const previous = save || defaultSave();
+  const next = {
+    ...previous,
+    bests: [...(previous.bests || DEFAULT_SAVE.bests)],
+    cleared: [...(previous.cleared || DEFAULT_SAVE.cleared)],
+  };
+
+  const runScore = number(score);
+  const totalScore = total === undefined ? runScore : number(total);
+  const index = Number.isInteger(gardenIndex) ? gardenIndex : -1;
+  const hasGarden = index >= 0 && index < next.bests.length;
+
+  next.runs = number(previous.runs) + 1;
+  next.best = Math.max(number(previous.best), totalScore);
+  if (hasGarden && runScore > number(next.bests[index])) {
+    next.bests[index] = runScore;
+  }
+  if (hasGarden && cleared) {
+    next.cleared[index] = true;
+    if (campaignCleared) next.clears = number(previous.clears) + 1;
+  }
+  next.seeds = number(previous.seeds) + number(seeds);
+  next.motes = number(previous.motes) + number(motes);
+
+  return next;
+}
+
 /** A fresh copy of the default save, with its own arrays. */
 export function defaultSave() {
   return {
@@ -58,35 +87,6 @@ export function writeSave(save) {
   } catch {
     return false;
   }
-}
-
-/** Fold one finished run into a new save without mutating the old one. */
-export function recordRun(save, { score, total, gardenIndex, cleared, campaignCleared, seeds, motes }) {
-  const previous = save || defaultSave();
-  const next = {
-    ...previous,
-    bests: [...(previous.bests || DEFAULT_SAVE.bests)],
-    cleared: [...(previous.cleared || DEFAULT_SAVE.cleared)],
-  };
-
-  const runScore = number(score);
-  const totalScore = total === undefined ? runScore : number(total);
-  const index = Number.isInteger(gardenIndex) ? gardenIndex : -1;
-  const hasGarden = index >= 0 && index < next.bests.length;
-
-  next.runs = number(previous.runs) + 1;
-  next.best = Math.max(number(previous.best), totalScore);
-  if (hasGarden && runScore > number(next.bests[index])) {
-    next.bests[index] = runScore;
-  }
-  if (hasGarden && cleared) {
-    next.cleared[index] = true;
-    if (campaignCleared) next.clears = number(previous.clears) + 1;
-  }
-  next.seeds = number(previous.seeds) + number(seeds);
-  next.motes = number(previous.motes) + number(motes);
-
-  return next;
 }
 
 export const SAVE_KEY = 'lumenwing.save.v1';
