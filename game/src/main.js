@@ -16,11 +16,14 @@ import { Input } from './input.js';
 import { Audio } from './audio.js';
 import { Particles } from './particles.js';
 import { clamp, formatTime } from './utils.js';
+import { loadSave, writeSave, recordRun, isGardenUnlocked } from './save.js';
+import { newRunStats, tally } from './stats.js';
+import { gardenCardRect } from './screens.js';
+import { GARDENS } from './gardens.js';
 
 const STEP = 1 / 120;
 const MAX_FRAME = 0.05;
 const MAX_STEPS = 8;
-const BEST_KEY = 'lumenwing.best';
 const POPUP_LIFE = 1.1;
 
 // Reused by the preset trail so the screenshot helpers do not allocate options.
@@ -43,6 +46,20 @@ const SHOT_PRESETS = {
     time: 2.4,
     elapsed: 0,
     best: 10240,
+  },
+  select: {
+    state: 'select',
+    time: 1.2,
+    save: {
+      best: 10240,
+      runs: 12,
+      clears: 1,
+      seeds: 38,
+      motes: 96,
+      bests: [3720, 4460, 0, 0],
+      cleared: [true, false, false, false],
+    },
+    selectedGarden: 1,
   },
   play: {
     garden: 0,
@@ -109,8 +126,20 @@ const SHOT_PRESETS = {
     elapsed: 96,
     time: 97,
   },
+  clear2: {
+    garden: 1,
+    state: 'clear',
+    atExit: true,
+    seeds: 6,
+    motes: 21,
+    hearts: 3,
+    oil: 74,
+    score: 8240,
+    elapsed: 214,
+    time: 215,
+  },
   victory: {
-    garden: 2,
+    garden: 3,
     state: 'victory',
     atExit: true,
     seeds: 7,
@@ -142,17 +171,6 @@ const SHOT_PRESETS = {
   },
 };
 
-/** Read the best score, treating unavailable storage as no best at all. */
-function loadBest() {
-  try {
-    const raw = window.localStorage.getItem(BEST_KEY);
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
-  } catch {
-    return 0;
-  }
-}
-
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -167,7 +185,10 @@ export class Game {
     this.state = 'title';
     this.time = 0;
     this.elapsed = 0;
-    this.best = loadBest();
+    this.save = loadSave();
+    this.stats = newRunStats();
+    this.best = this.save.best;
+    this.selectedGarden = this.firstUnlockedGarden();
     this.newBest = false;
     this.muted = false;
     this.shake = 0;
@@ -177,6 +198,11 @@ export class Game {
     this.acc = 0;
     this.last = -1;
     this.debugPaused = false;
+
+    this.gardenStartScore = 0;
+    this.committedSeeds = 0;
+    this.committedMotes = 0;
+    this.campaign = false;
 
     this.world = new World(0);
     this.player = new Player(this.world);
@@ -208,8 +234,11 @@ export class Game {
 
   // ------------------------------------------------------------- lifecycle ---
 
-  /** Begin a fresh three-garden run at `garden`. */
+  /** Begin a fresh four-garden run at `garden`. */
   startRun(garden = 0) {
+    this.selectedGarden = garden;
+    this.stats = newRunStats();
+    this.stats.startedAt = performance.now();
     this.world = new World(garden);
     this.player = new Player(this.world);
     this.spawnBats();
@@ -222,10 +251,76 @@ export class Game {
     this.newBest = false;
     this.reason = '';
     this.acc = 0;
+    this.gardenStartScore = 0;
+    this.committedSeeds = 0;
+    this.committedMotes = 0;
+    this.campaign = true;
     this.state = 'play';
     this.audio.start();
     this.snapCamera();
     this.setStatus(`The lantern wakes in ${this.world.garden.name}.`);
+  }
+
+  /** The earliest garden the save has opened, used as the initial cursor. */
+  firstUnlockedGarden() {
+    const count = (this.save.cleared && this.save.cleared.length) || 4;
+    for (let index = 0; index < count; index++) {
+      if (isGardenUnlocked(this.save, index)) return index;
+    }
+    return 0;
+  }
+
+  /** Open the garden map with a cursor that points at an unlocked card. */
+  openGardenSelect() {
+    if (!isGardenUnlocked(this.save, this.selectedGarden)) {
+      this.selectedGarden = this.firstUnlockedGarden();
+    }
+    if (!this.campaign) this.selectedGarden = this.firstUnlockedGarden();
+    this.state = 'select';
+    this.newBest = false;
+    this.setStatus('Choose a garden. Left and right to choose, Enter to fly.');
+  }
+
+  /** Step the cursor, skipping locked cards and wrapping at both ends. */
+  moveSelection(direction) {
+    const count = (this.save.cleared && this.save.cleared.length) || 4;
+    for (let step = 1; step <= count; step++) {
+      const next = (this.selectedGarden + direction * step + count) % count;
+      if (isGardenUnlocked(this.save, next)) {
+        this.selectedGarden = next;
+        return;
+      }
+    }
+  }
+
+  /** Convert a pointer event into the fixed 1280x720 stage coordinates. */
+  pointerStage(event) {
+    if (!event || !this.canvas || !Number.isFinite(event.clientX)) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * VIEW_W,
+      y: ((event.clientY - rect.top) / rect.height) * VIEW_H,
+    };
+  }
+
+  /** Index of the garden card under the pointer, or -1. */
+  gardenAtPointer(event) {
+    const point = this.pointerStage(event);
+    if (!point) return -1;
+    const count = (this.save.cleared && this.save.cleared.length) || 4;
+    for (let index = 0; index < count; index++) {
+      const rect = gardenCardRect(index);
+      if (
+        point.x >= rect.x &&
+        point.x <= rect.x + rect.w &&
+        point.y >= rect.y &&
+        point.y <= rect.y + rect.h
+      ) {
+        return index;
+      }
+    }
+    return -1;
   }
 
   /**
@@ -234,6 +329,8 @@ export class Game {
    */
   startGarden(index) {
     const score = this.player.score;
+    this.gardenStartScore = score;
+    this.campaign = true;
     const hearts = this.player.hearts;
     const oil = this.player.oil;
     const maxHearts = this.player.maxHearts;
@@ -284,40 +381,74 @@ export class Game {
 
   /** Advance after a cleared garden, or finish the whole run. */
   advance() {
-    if (this.world.index === 2) {
+    if (this.world.index >= GARDENS.length - 1) {
       this.finish();
     } else {
-      this.startGarden(this.world.index + 1);
+      this.campaign = true;
+      this.selectedGarden = this.world.index + 1;
+      this.openGardenSelect();
+      this.setStatus(`${this.world.garden.name} is awake. Choose the next garden.`);
     }
   }
 
-  /** The third moonflower woke: close the run with a final bonus. */
+  /** The last moonflower woke: close the run with a final bonus. */
   finish() {
     this.player.score += 2000 + this.player.hearts * 250;
     this.state = 'victory';
     this.audio.victory();
-    this.commitBest();
+    this.commitFinalScore();
+    this.campaign = false;
     this.setStatus(
-      `All three gardens are awake. Final score ${this.player.score.toLocaleString('en-US')} in ${formatTime(this.elapsed)}.`,
+      `All four gardens are awake. Final score ${this.player.score.toLocaleString('en-US')} in ${formatTime(this.elapsed)}.`,
     );
   }
 
-  /** Remember a run if it beats the stored best, and flag a new record. */
-  commitBest() {
-    if (this.player.score <= this.best) return;
-    this.best = this.player.score;
-    this.newBest = true;
-    try {
-      window.localStorage.setItem(BEST_KEY, String(this.best));
-    } catch {
-      // Private mode or blocked storage: the run still stands for this page.
+  /** Lift the stored best when the final bonus pushes the total above it. */
+  commitFinalScore() {
+    if (this.player.score > this.save.best) {
+      this.save = { ...this.save, best: this.player.score };
+      writeSave(this.save);
     }
+    this.commitBest();
+  }
+
+  /** Fold one finished garden into the save, once, and refresh the record flag. */
+  commitGarden(cleared) {
+    const total = this.player.score;
+    const score = Math.max(0, total - (this.gardenStartScore || 0));
+    const seeds = Math.max(0, this.stats.seeds - (this.committedSeeds || 0));
+    const motes = Math.max(0, this.stats.motes - (this.committedMotes || 0));
+    this.newBest = total > this.save.best;
+    this.save = recordRun(this.save, {
+      score,
+      total,
+      gardenIndex: this.world.index,
+      cleared,
+      campaignCleared: cleared && this.world.index === GARDENS.length - 1,
+      seeds,
+      motes,
+    });
+    this.committedSeeds = this.stats.seeds;
+    this.committedMotes = this.stats.motes;
+    writeSave(this.save);
+    this.commitBest();
+  }
+
+  /** Read the headline best back from the save after a recorded run. */
+  commitBest() {
+    this.best = this.save.best;
   }
 
   /** Lantern pulse feedback: the sound plus a short shiver. */
   pulse() {
     this.audio.pulse();
     this.shake = Math.max(this.shake, 5);
+    this.stats = tally(this.stats, 'pulses');
+  }
+
+  /** One bat was scared off by the lantern pulse. */
+  startle() {
+    this.stats = tally(this.stats, 'bats');
   }
 
   /** Bat-hit feedback: sound, red flash and a harder shiver. */
@@ -335,7 +466,8 @@ export class Game {
     this.state = 'gameover';
     this.flash = Math.max(this.flash, 0.5);
     this.audio.lose();
-    this.commitBest();
+    this.commitGarden(false);
+    this.campaign = false;
     this.setStatus(reason);
   }
 
@@ -379,7 +511,20 @@ export class Game {
         if (input.hit('Space') || input.hit('Enter') || input.hit('KeyR')) {
           // Consume Space so the same press does not immediately pulse.
           input.pressed.delete('Space');
-          this.startRun(0);
+          this.openGardenSelect();
+        }
+        break;
+      case 'select':
+        if (input.hit('ArrowLeft') || input.hit('KeyA')) this.moveSelection(-1);
+        if (input.hit('ArrowRight') || input.hit('KeyD')) this.moveSelection(1);
+        if (input.hit('Enter') || input.hit('Space')) {
+          input.pressed.delete('Space');
+          this.campaign ? this.startGarden(this.selectedGarden) : this.startRun(this.selectedGarden);
+        }
+        if (input.hit('Escape')) {
+          this.campaign = false;
+          this.state = 'title';
+          this.setStatus('Lumenwing. Press Enter to wake.');
         }
         break;
       case 'play':
@@ -398,7 +543,10 @@ export class Game {
         break;
       case 'victory':
       case 'gameover':
-        if (input.hit('KeyR') || input.hit('Enter')) this.startRun(0);
+        if (input.hit('KeyR') || input.hit('Enter')) {
+          this.campaign = false;
+          this.openGardenSelect();
+        }
         break;
       default:
         break;
@@ -406,20 +554,28 @@ export class Game {
   }
 
   /** A click on the stage does whatever the current card asks for. */
-  onPointerDown() {
+  onPointerDown(event) {
     if (this.canvas && typeof this.canvas.focus === 'function') this.canvas.focus();
     this.audio.start();
 
     switch (this.state) {
       case 'title':
-        this.startRun(0);
+        this.openGardenSelect();
         break;
+      case 'select': {
+        const index = this.gardenAtPointer(event);
+        if (index >= 0 && isGardenUnlocked(this.save, index)) {
+          this.campaign ? this.startGarden(index) : this.startRun(index);
+        }
+        break;
+      }
       case 'clear':
         this.advance();
         break;
       case 'victory':
       case 'gameover':
-        this.startRun(0);
+        this.campaign = false;
+        this.openGardenSelect();
         break;
       case 'paused':
         this.resumeGame();
@@ -452,6 +608,7 @@ export class Game {
       seed.taken = true;
       player.seeds += 1;
       player.score += 250;
+      this.stats = tally(this.stats, 'seeds');
       this.audio.seed();
       this.particles.burst(seed.x, seed.y, 14, '#ffd685', 125, 0.62, 3);
       this.addPopup('+250', seed.x, seed.y - 20, '#ffe6a6');
@@ -477,6 +634,7 @@ export class Game {
       mote.taken = true;
       player.score += 20;
       this.motes += 1;
+      this.stats = tally(this.stats, 'motes');
       this.audio.mote();
       this.particles.burst(mote.x, mote.y, 6, '#fff2c0', 62, 0.44, 2);
       this.addPopup('+20', mote.x, mote.y - 16, '#fff6c8');
@@ -492,9 +650,10 @@ export class Game {
 
     this.player.score += 500 + this.player.hearts * 100;
     this.state = 'clear';
+    this.stats = tally(this.stats, 'gardens');
+    this.commitGarden(true);
     this.audio.clear();
     this.particles.burst(exit.x, exit.y, 40, '#e8ecff', 170, 0.9, 3);
-    this.commitBest();
     this.setStatus(
       `${garden.name} is awake. Cleared in ${formatTime(this.elapsed)}.`,
     );
@@ -630,18 +789,41 @@ export class Game {
     const shot = SHOT_PRESETS[name];
     if (!shot) return;
 
-    this.startRun(shot.garden);
-    for (let i = 0; i < 24; i++) this.step(1 / 60);
+    // A preset save is copied before anything reads a best or a lock; the
+    // select screen is the only state that does not build a fresh run.
+    if (shot.save) {
+      this.save = { ...shot.save };
+      this.save.bests = [...(shot.save.bests || [])];
+      this.save.cleared = [...(shot.save.cleared || [])];
+      this.best = Number.isFinite(this.save.best) ? this.save.best : 0;
+    }
+
+    if (shot.state !== 'select') {
+      this.startRun(shot.garden);
+      for (let i = 0; i < 24; i++) this.step(1 / 60);
+    }
 
     this.state = shot.state;
-    this.time = shot.time;
-    this.elapsed = shot.elapsed;
-    this.best = Number.isFinite(shot.best) ? shot.best : 0;
+    this.time = Number.isFinite(shot.time) ? shot.time : 0;
+    this.elapsed = Number.isFinite(shot.elapsed) ? shot.elapsed : 0;
+    this.best = Number.isFinite(shot.best) ? shot.best : this.save.best;
     this.newBest = !!shot.newBest;
     this.reason = shot.reason || '';
     this.shake = 0;
     this.flash = 0;
     this.popups.length = 0;
+
+    // Keep the presentation counters in step with the preset, including the
+    // victory tally, without recording another run.
+    const stats = newRunStats();
+    stats.seeds = Number.isFinite(shot.seeds) ? shot.seeds : 0;
+    stats.motes = Number.isFinite(shot.motes) ? shot.motes : 0;
+    stats.gardens =
+      shot.state === 'victory' ? 3 : shot.state === 'clear' ? this.world.index + 1 : 0;
+    stats.startedAt = performance.now() - this.elapsed * 1000;
+    this.stats = stats;
+
+    if (Number.isInteger(shot.selectedGarden)) this.selectedGarden = shot.selectedGarden;
 
     this.placePresetPlayer(shot);
     this.markPresetPickups(shot);

@@ -252,7 +252,7 @@ export class Audio {
     }
   }
 
-  /** Longer six-note fanfare for all three gardens. */
+  /** Longer six-note fanfare for all four gardens. */
   victory() {
     if (this.muted || !this.ready) return;
     for (let i = 0; i < VICTORY_NOTES.length; i++) {

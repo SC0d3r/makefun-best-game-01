@@ -217,6 +217,7 @@ export class Player {
           const reachY = bat.y - this.y;
           if (reachX * reachX + reachY * reachY <= PULSE_RADIUS * PULSE_RADIUS) {
             bat.frightened = Math.max(Number.isFinite(bat.frightened) ? bat.frightened : 0, 1.6);
+            if (game && typeof game.startle === 'function') game.startle();
           }
         }
       }

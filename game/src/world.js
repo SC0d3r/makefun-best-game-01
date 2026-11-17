@@ -1,4 +1,4 @@
-// The three sleeping gardens and the one long cave each of them hides.
+// The four sleeping gardens and the one long cave each of them hides.
 //
 // The cave profile is a pure function of the garden seed: no state, no random
 // numbers, so the walls are identical on every visit. The rest of a garden
@@ -6,79 +6,11 @@
 // constructor with a seeded PRNG, again so a run can be reproduced exactly.
 
 import { TAU, clamp, hash, lerp, mulberry32, smooth } from './utils.js';
+import { GARDENS } from './gardens.js';
 
 /** The game's fixed design resolution, in pixels. */
 export const VIEW_W = 1280;
 export const VIEW_H = 720;
-
-// ------------------------------------------------------------------ gardens ---
-
-/**
- * The three gardens, in play order. Palette colours live directly on each
- * garden because the frozen renderer reads `garden.bgTop`, `garden.edge`, etc.
- */
-export const GARDENS = [
-  {
-    id: 'dewglass',
-    name: 'Dewglass Garden',
-    subtitle: 'Where the first light pools',
-    length: 5200,
-    seed: 11,
-    seeds: 5,
-    bats: 3,
-    bgTop: '#0d2b44',
-    bgBottom: '#1e6470',
-    rock: '#1c4856',
-    rockDeep: '#0c2430',
-    edge: '#62f4dc',
-    edgeSoft: '#2aa89e',
-    flora: '#74f2d6',
-    accent: '#ffd685',
-    fog: '#16525e',
-    star: '#a8fff0',
-    aura: '#ffd685',
-  },
-  {
-    id: 'emberfall',
-    name: 'Emberfall Grove',
-    subtitle: 'The warm dark, and what wakes in it',
-    length: 6200,
-    seed: 29,
-    seeds: 6,
-    bats: 3,
-    bgTop: '#3e1426',
-    bgBottom: '#702a3a',
-    rock: '#542030',
-    rockDeep: '#2a1018',
-    edge: '#ff9472',
-    edgeSoft: '#b8483a',
-    flora: '#ffa477',
-    accent: '#ffe39a',
-    fog: '#602432',
-    star: '#ffc9a0',
-    aura: '#ffcf7a',
-  },
-  {
-    id: 'frostbloom',
-    name: 'Frostbloom Hollow',
-    subtitle: 'The quiet at the end of the garden',
-    length: 7200,
-    seed: 47,
-    seeds: 7,
-    bats: 4,
-    bgTop: '#1c1d52',
-    bgBottom: '#3c3c80',
-    rock: '#30306e',
-    rockDeep: '#181840',
-    edge: '#b0a2ff',
-    edgeSoft: '#6658b8',
-    flora: '#8fe8ff',
-    accent: '#e8dcff',
-    fog: '#32326e',
-    star: '#d8d4ff',
-    aura: '#b7a8ff',
-  },
-];
 
 // --------------------------------------------------------------------- cave ---
 
