@@ -9,167 +9,12 @@
 
 import { World, caveCenter, VIEW_W, VIEW_H } from './world.js';
 import { Player } from './player.js';
-import { Bat } from './creatures.js';
+import { Bat, Particles } from './creatures.js';
 import { Renderer } from './render.js';
-import { Hud } from './hud.js';
-import { Input } from './input.js';
-import { Audio } from './audio.js';
-import { Particles } from './particles.js';
-import { clamp, formatTime } from './utils.js';
+import { Hud, Audio } from './hud.js';
+import { clamp, formatTime, GARDENS } from './gardens.js';
 import { loadSave, writeSave, recordRun, isGardenUnlocked } from './save.js';
-import { newRunStats, tally } from './stats.js';
-import { gardenCardRect } from './screens.js';
-import { GARDENS } from './gardens.js';
-
-const STEP = 1 / 120;
-const MAX_FRAME = 0.05;
-const MAX_STEPS = 8;
-const POPUP_LIFE = 1.1;
-
-// Reused by the preset trail so the screenshot helpers do not allocate options.
-const TRAIL_OPTIONS = Object.freeze({
-  drag: 2.6,
-  gravity: -6,
-  glow: true,
-  fade: 1.5,
-});
-
-/**
- * Screenshot presets. Each one is applied only when `?shot=name` is present,
- * never from the normal loop. `at` is a fraction of the garden length and
- * `atExit` places the moth beside the moonflower.
- */
-const SHOT_PRESETS = {
-  title: {
-    garden: 0,
-    state: 'title',
-    time: 2.4,
-    elapsed: 0,
-    best: 10240,
-  },
-  select: {
-    state: 'select',
-    time: 1.2,
-    save: {
-      best: 10240,
-      runs: 12,
-      clears: 1,
-      seeds: 38,
-      motes: 96,
-      bests: [3720, 4460, 0, 0],
-      cleared: [true, false, false, false],
-    },
-    selectedGarden: 1,
-  },
-  play: {
-    garden: 0,
-    state: 'play',
-    at: 0.46,
-    seeds: 2,
-    motes: 11,
-    hearts: 3,
-    oil: 68,
-    score: 2180,
-    elapsed: 74,
-    time: 75,
-    nearBats: 1,
-    trail: 8,
-  },
-  ember: {
-    garden: 1,
-    state: 'play',
-    at: 0.55,
-    seeds: 3,
-    motes: 13,
-    hearts: 2,
-    oil: 41,
-    score: 3960,
-    elapsed: 151,
-    time: 152,
-    nearBats: 2,
-  },
-  bloom: {
-    garden: 1,
-    state: 'play',
-    at: 0.62,
-    seeds: 6,
-    motes: 16,
-    hearts: 3,
-    oil: 58,
-    score: 4460,
-    elapsed: 148,
-    time: 149,
-    nearBats: 2,
-  },
-  frost: {
-    garden: 2,
-    state: 'play',
-    at: 0.62,
-    seeds: 5,
-    motes: 17,
-    hearts: 2,
-    oil: 33,
-    score: 5210,
-    elapsed: 236,
-    time: 237,
-    nearBats: 2,
-  },
-  clear: {
-    garden: 0,
-    state: 'clear',
-    atExit: true,
-    seeds: 5,
-    motes: 19,
-    hearts: 3,
-    oil: 74,
-    score: 3720,
-    elapsed: 96,
-    time: 97,
-  },
-  clear2: {
-    garden: 1,
-    state: 'clear',
-    atExit: true,
-    seeds: 6,
-    motes: 21,
-    hearts: 3,
-    oil: 74,
-    score: 8240,
-    elapsed: 214,
-    time: 215,
-  },
-  victory: {
-    garden: 3,
-    state: 'victory',
-    atExit: true,
-    seeds: 7,
-    motes: 44,
-    hearts: 2,
-    oil: 70,
-    score: 10240,
-    elapsed: 411,
-    time: 412,
-    best: 10240,
-    newBest: true,
-  },
-  gameover: {
-    garden: 0,
-    state: 'gameover',
-    at: 0.52,
-    atExit: false,
-    seeds: 2,
-    motes: 13,
-    hearts: 1,
-    oil: 0,
-    score: 1240,
-    elapsed: 214,
-    time: 9.2,
-    best: 3650,
-    dead: true,
-    reason: 'The lantern has gone dark.',
-    nearBats: 1,
-  },
-};
+import { newRunStats, tally, gardenCardRect } from './screens.js';
 
 export class Game {
   constructor(canvas) {
@@ -958,6 +803,267 @@ export class Game {
         this.state = name;
       },
     };
+  }
+}
+
+const STEP = 1 / 120;
+const MAX_FRAME = 0.05;
+const MAX_STEPS = 8;
+const POPUP_LIFE = 1.1;
+
+// Reused by the preset trail so the screenshot helpers do not allocate options.
+const TRAIL_OPTIONS = Object.freeze({
+  drag: 2.6,
+  gravity: -6,
+  glow: true,
+  fade: 1.5,
+});
+
+/**
+ * Screenshot presets. Each one is applied only when `?shot=name` is present,
+ * never from the normal loop. `at` is a fraction of the garden length and
+ * `atExit` places the moth beside the moonflower.
+ */
+const SHOT_PRESETS = {
+  title: {
+    garden: 0,
+    state: 'title',
+    time: 2.4,
+    elapsed: 0,
+    best: 10240,
+  },
+  select: {
+    state: 'select',
+    time: 1.2,
+    save: {
+      best: 10240,
+      runs: 12,
+      clears: 1,
+      seeds: 38,
+      motes: 96,
+      bests: [3720, 4460, 0, 0],
+      cleared: [true, true, false, false],
+    },
+    selectedGarden: 2,
+  },
+  play: {
+    garden: 0,
+    state: 'play',
+    at: 0.46,
+    seeds: 2,
+    motes: 11,
+    hearts: 3,
+    oil: 68,
+    score: 2180,
+    elapsed: 74,
+    time: 75,
+    nearBats: 1,
+    trail: 8,
+  },
+  ember: {
+    garden: 1,
+    state: 'play',
+    at: 0.55,
+    seeds: 3,
+    motes: 13,
+    hearts: 2,
+    oil: 41,
+    score: 3960,
+    elapsed: 151,
+    time: 152,
+    nearBats: 2,
+  },
+  bloom: {
+    garden: 1,
+    state: 'play',
+    at: 0.62,
+    seeds: 6,
+    motes: 16,
+    hearts: 3,
+    oil: 58,
+    score: 4460,
+    elapsed: 148,
+    time: 149,
+    nearBats: 2,
+  },
+  frost: {
+    garden: 2,
+    state: 'play',
+    at: 0.62,
+    seeds: 5,
+    motes: 17,
+    hearts: 2,
+    oil: 33,
+    score: 5210,
+    elapsed: 236,
+    time: 237,
+    nearBats: 2,
+  },
+  clear: {
+    garden: 0,
+    state: 'clear',
+    atExit: true,
+    seeds: 5,
+    motes: 19,
+    hearts: 3,
+    oil: 74,
+    score: 3720,
+    elapsed: 96,
+    time: 97,
+  },
+  clear2: {
+    garden: 1,
+    state: 'clear',
+    atExit: true,
+    seeds: 6,
+    motes: 21,
+    hearts: 3,
+    oil: 74,
+    score: 8240,
+    elapsed: 214,
+    time: 215,
+  },
+  victory: {
+    garden: 3,
+    state: 'victory',
+    atExit: true,
+    seeds: 7,
+    motes: 44,
+    hearts: 2,
+    oil: 70,
+    score: 10240,
+    elapsed: 411,
+    time: 412,
+    best: 10240,
+    newBest: true,
+  },
+  gameover: {
+    garden: 0,
+    state: 'gameover',
+    at: 0.52,
+    atExit: false,
+    seeds: 2,
+    motes: 13,
+    hearts: 1,
+    oil: 0,
+    score: 1240,
+    elapsed: 214,
+    time: 9.2,
+    best: 3650,
+    dead: true,
+    reason: 'The lantern has gone dark.',
+    nearBats: 1,
+  },
+};
+
+// Keyboard input for LUMENWING.
+//
+// The game reads two kinds of edges from this module:
+//   - held()    is true for as long as a key is down;
+//   - hit()     is true only for the frame in which the key went down.
+// endFrame() is called once at the end of every game loop iteration, so pressed
+// and released always describe exactly one frame.
+
+const PREVENT_DEFAULT = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Space',
+]);
+
+export class Input {
+  /**
+   * @param {EventTarget} [target] element (or window) that receives key events.
+   */
+  constructor(target = typeof window !== 'undefined' ? window : null) {
+    this.target = target;
+    this.down = new Set();
+    this.pressed = new Set();
+    this.released = new Set();
+    this.any = false;
+
+    this.onKeyDown = (event) => {
+      const code = event.code;
+      if (!code) return;
+      // Arrows scroll the page and Space activates focused buttons; neither is
+      // wanted while flying.
+      if (PREVENT_DEFAULT.has(code)) event.preventDefault();
+      if (!this.down.has(code)) this.pressed.add(code);
+      this.down.add(code);
+      this.any = true;
+    };
+
+    this.onKeyUp = (event) => {
+      const code = event.code;
+      if (!code) return;
+      this.down.delete(code);
+      this.released.add(code);
+    };
+
+    // Losing focus mid-key would otherwise leave the moth flying forever.
+    this.onBlur = () => {
+      this.down.clear();
+      this.pressed.clear();
+      this.released.clear();
+      this.any = false;
+    };
+
+    if (this.target && typeof this.target.addEventListener === 'function') {
+      this.target.addEventListener('keydown', this.onKeyDown);
+      this.target.addEventListener('keyup', this.onKeyUp);
+    }
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('blur', this.onBlur);
+    }
+  }
+
+  /** True while `code` is held down. */
+  held(code) {
+    return this.down.has(code);
+  }
+
+  /** True only on the frame `code` first went down. */
+  hit(code) {
+    return this.pressed.has(code);
+  }
+
+  /**
+   * Movement direction from WASD and the arrow keys.
+   * Diagonals are normalised so they are not faster than a single axis.
+   */
+  axis() {
+    const left = this.held('KeyA') || this.held('ArrowLeft');
+    const right = this.held('KeyD') || this.held('ArrowRight');
+    const up = this.held('KeyW') || this.held('ArrowUp');
+    const down = this.held('KeyS') || this.held('ArrowDown');
+
+    let x = (right ? 1 : 0) - (left ? 1 : 0);
+    let y = (down ? 1 : 0) - (up ? 1 : 0);
+    const length = Math.sqrt(x * x + y * y);
+    if (length > 1) {
+      x /= length;
+      y /= length;
+    }
+    return { x, y };
+  }
+
+  /** Retire this frame's one-shot edges. Call after updating the game. */
+  endFrame() {
+    this.pressed.clear();
+    this.released.clear();
+    this.any = false;
+  }
+
+  /** Remove every listener (used when the game view is torn down). */
+  destroy() {
+    if (this.target && typeof this.target.removeEventListener === 'function') {
+      this.target.removeEventListener('keydown', this.onKeyDown);
+      this.target.removeEventListener('keyup', this.onKeyUp);
+    }
+    if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+      window.removeEventListener('blur', this.onBlur);
+    }
   }
 }
 

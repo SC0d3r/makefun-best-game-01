@@ -2,7 +2,7 @@
 // strata, stalactites and glowing flora, the pickups, the moonflower and the
 // lantern light that cuts through the dark. The renderer keeps one offscreen
 // canvas for the light mask so the world can be dimmed without touching the HUD.
-import { TAU, clamp, hash, hashAt, lerp } from './utils.js';
+import { TAU, clamp, hash, hashAt, lerp } from './gardens.js';
 import { caveAt, caveCenter, VIEW_W, VIEW_H } from './world.js';
 
 export class Renderer {

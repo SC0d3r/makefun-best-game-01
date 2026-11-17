@@ -5,107 +5,8 @@
 // cave walls and boulders without ever stopping the tangential slide, so the
 // moth brushes along rock instead of sticking to it.
 
-import { TAU, clamp, easeOut } from './utils.js';
+import { TAU, clamp, easeOut } from './gardens.js';
 import { caveAt } from './world.js';
-
-const ACCELERATION = 1780;
-const DRAG = 3.7;
-const MAX_SPEED = 330;
-const OIL_DRAIN = 0.8;
-const PULSE_COST = 12;
-const PULSE_TIME = 1.2;
-const PULSE_COOLDOWN = 0.85;
-const PULSE_RADIUS = 290;
-const TRAIL_INTERVAL = 0.055;
-
-// Reused for every trail particle, so flight does not allocate an options bag.
-const TRAIL_OPTIONS = Object.freeze({
-  drag: 2.6,
-  gravity: -6,
-  glow: true,
-  fade: 1.5,
-});
-
-const NO_ISLANDS = [];
-
-/** Clamp a body between the cave walls, bouncing softly off them. */
-function clampToCave(world, body, radius) {
-  if (typeof world.clampToCave === 'function') {
-    world.clampToCave(body, radius);
-    return;
-  }
-
-  const corridor =
-    typeof world.corridorFor === 'function'
-      ? world.corridorFor(body.x, radius)
-      : caveAt(world.garden, body.x);
-  const top = corridor.ceiling + radius;
-  const bottom = corridor.floor - radius;
-  if (body.y < top) {
-    body.y = top;
-    if (body.vy < 0) body.vy *= -0.32;
-  } else if (body.y > bottom) {
-    body.y = bottom;
-    if (body.vy > 0) body.vy *= -0.32;
-  }
-
-  const left = radius;
-  const right = Number.isFinite(world.length) ? world.length - radius : Infinity;
-  if (body.x < left) {
-    body.x = left;
-    if (body.vx < 0) body.vx *= -0.32;
-  } else if (body.x > right) {
-    body.x = right;
-    if (body.vx > 0) body.vx *= -0.32;
-  }
-}
-
-/**
- * Push a circle out of boulders and reflect only the inward part of its
- * velocity. The tangential part is untouched, which is what makes sliding feel
- * smooth instead of sticky.
- */
-function pushOutOfIslands(world, body, radius, restitution) {
-  if (typeof world.islandPush === 'function') {
-    const result = world.islandPush(body.x, body.y, radius);
-    if (result && Number.isFinite(result.x) && Number.isFinite(result.y)) {
-      body.x = result.x;
-      body.y = result.y;
-    }
-  }
-
-  const islands = world.islands || NO_ISLANDS;
-  for (let pass = 0; pass < 2; pass++) {
-    let moved = false;
-    for (let i = 0; i < islands.length; i++) {
-      const island = islands[i];
-      const pad = island.r + radius;
-      let dx = body.x - island.x;
-      let dy = body.y - island.y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 >= pad * pad) continue;
-
-      let d = Math.sqrt(d2);
-      if (d < 0.0001) {
-        dx = 0;
-        dy = -1;
-        d = 1;
-      }
-      const nx = dx / d;
-      const ny = dy / d;
-      body.x = island.x + nx * pad;
-      body.y = island.y + ny * pad;
-
-      const inward = body.vx * nx + body.vy * ny;
-      if (inward < 0) {
-        body.vx -= (1 + restitution) * inward * nx;
-        body.vy -= (1 + restitution) * inward * ny;
-      }
-      moved = true;
-    }
-    if (!moved) break;
-  }
-}
 
 export class Player {
   constructor(world) {
@@ -507,5 +408,104 @@ export class Player {
     ctx.arc(cx, cy, 2.05 * s, 0, TAU);
     ctx.fill();
     ctx.restore();
+  }
+}
+
+const ACCELERATION = 1780;
+const DRAG = 3.7;
+const MAX_SPEED = 330;
+const OIL_DRAIN = 0.8;
+const PULSE_COST = 12;
+const PULSE_TIME = 1.2;
+const PULSE_COOLDOWN = 0.85;
+const PULSE_RADIUS = 290;
+const TRAIL_INTERVAL = 0.055;
+
+// Reused for every trail particle, so flight does not allocate an options bag.
+const TRAIL_OPTIONS = Object.freeze({
+  drag: 2.6,
+  gravity: -6,
+  glow: true,
+  fade: 1.5,
+});
+
+const NO_ISLANDS = [];
+
+/** Clamp a body between the cave walls, bouncing softly off them. */
+function clampToCave(world, body, radius) {
+  if (typeof world.clampToCave === 'function') {
+    world.clampToCave(body, radius);
+    return;
+  }
+
+  const corridor =
+    typeof world.corridorFor === 'function'
+      ? world.corridorFor(body.x, radius)
+      : caveAt(world.garden, body.x);
+  const top = corridor.ceiling + radius;
+  const bottom = corridor.floor - radius;
+  if (body.y < top) {
+    body.y = top;
+    if (body.vy < 0) body.vy *= -0.32;
+  } else if (body.y > bottom) {
+    body.y = bottom;
+    if (body.vy > 0) body.vy *= -0.32;
+  }
+
+  const left = radius;
+  const right = Number.isFinite(world.length) ? world.length - radius : Infinity;
+  if (body.x < left) {
+    body.x = left;
+    if (body.vx < 0) body.vx *= -0.32;
+  } else if (body.x > right) {
+    body.x = right;
+    if (body.vx > 0) body.vx *= -0.32;
+  }
+}
+
+/**
+ * Push a circle out of boulders and reflect only the inward part of its
+ * velocity. The tangential part is untouched, which is what makes sliding feel
+ * smooth instead of sticky.
+ */
+function pushOutOfIslands(world, body, radius, restitution) {
+  if (typeof world.islandPush === 'function') {
+    const result = world.islandPush(body.x, body.y, radius);
+    if (result && Number.isFinite(result.x) && Number.isFinite(result.y)) {
+      body.x = result.x;
+      body.y = result.y;
+    }
+  }
+
+  const islands = world.islands || NO_ISLANDS;
+  for (let pass = 0; pass < 2; pass++) {
+    let moved = false;
+    for (let i = 0; i < islands.length; i++) {
+      const island = islands[i];
+      const pad = island.r + radius;
+      let dx = body.x - island.x;
+      let dy = body.y - island.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= pad * pad) continue;
+
+      let d = Math.sqrt(d2);
+      if (d < 0.0001) {
+        dx = 0;
+        dy = -1;
+        d = 1;
+      }
+      const nx = dx / d;
+      const ny = dy / d;
+      body.x = island.x + nx * pad;
+      body.y = island.y + ny * pad;
+
+      const inward = body.vx * nx + body.vy * ny;
+      if (inward < 0) {
+        body.vx -= (1 + restitution) * inward * nx;
+        body.vy -= (1 + restitution) * inward * ny;
+      }
+      moved = true;
+    }
+    if (!moved) break;
   }
 }

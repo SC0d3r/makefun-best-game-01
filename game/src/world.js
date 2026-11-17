@@ -5,122 +5,7 @@
 // (boulders, sunseeds, oil, motes, bats) is laid out once in the World
 // constructor with a seeded PRNG, again so a run can be reproduced exactly.
 
-import { TAU, clamp, hash, lerp, mulberry32, smooth } from './utils.js';
-import { GARDENS } from './gardens.js';
-
-/** The game's fixed design resolution, in pixels. */
-export const VIEW_W = 1280;
-export const VIEW_H = 720;
-
-// --------------------------------------------------------------------- cave ---
-
-const CEILING_BASE = 158;
-const CEILING_WAVES = [
-  [50, 0.0022],
-  [27, 0.0061],
-  [13, 0.0137],
-];
-const FLOOR_BASE = 566;
-const FLOOR_WAVES = [
-  [40, 0.0018],
-  [24, 0.0053],
-  [11, 0.0111],
-];
-
-const CEILING_MIN = 78;
-const CEILING_MAX = 245;
-const FLOOR_MIN = 470;
-const FLOOR_MAX = 646;
-const MIN_CORRIDOR = 292;
-
-const ENTRY_LENGTH = 230;
-const EXIT_LENGTH = 300;
-const ENTRY_CEILING = 112;
-const ENTRY_FLOOR = 608;
-
-// Phase sets are expensive to derive on every caveAt() call (the renderer calls
-// it hundreds of times per frame), so cache them by seed.
-const phaseCache = new Map();
-
-function phasesFor(seed) {
-  let cached = phaseCache.get(seed);
-  if (cached) return cached;
-
-  const ceiling = CEILING_WAVES.map((wave, i) => ({
-    amp: wave[0],
-    freq: wave[1],
-    phase: hash(seed * 131 + i * 17 + 3) * TAU,
-  }));
-  const floor = FLOOR_WAVES.map((wave, i) => ({
-    amp: wave[0],
-    freq: wave[1],
-    phase: hash(seed * 197 + i * 23 + 7) * TAU,
-  }));
-
-  cached = { ceiling, floor };
-  phaseCache.set(seed, cached);
-  return cached;
-}
-
-function profile(garden, x) {
-  const phases = phasesFor(garden.seed);
-
-  let ceiling = CEILING_BASE;
-  for (const wave of phases.ceiling) {
-    ceiling += wave.amp * Math.sin(x * wave.freq + wave.phase);
-  }
-
-  let floor = FLOOR_BASE;
-  for (const wave of phases.floor) {
-    floor += wave.amp * Math.sin(x * wave.freq + wave.phase);
-  }
-
-  ceiling = clamp(ceiling, CEILING_MIN, CEILING_MAX);
-  floor = clamp(floor, FLOOR_MIN, FLOOR_MAX);
-
-  // Keep the flyable corridor wide enough even in the narrowest pinch.
-  if (floor - ceiling < MIN_CORRIDOR) {
-    const middle = (ceiling + floor) / 2;
-    ceiling = middle - MIN_CORRIDOR / 2;
-    floor = middle + MIN_CORRIDOR / 2;
-  }
-
-  // The first and last stretches open into calm antechambers. smooth() clamps
-  // its input, so the profile also stays sensible for world x outside 0..length.
-  const entry = 1 - smooth(x / ENTRY_LENGTH);
-  if (entry > 0) {
-    ceiling = lerp(ceiling, ENTRY_CEILING, entry);
-    floor = lerp(floor, ENTRY_FLOOR, entry);
-  }
-
-  const leave = smooth((x - (garden.length - EXIT_LENGTH)) / EXIT_LENGTH);
-  if (leave > 0) {
-    ceiling = lerp(ceiling, ENTRY_CEILING, leave);
-    floor = lerp(floor, ENTRY_FLOOR, leave);
-  }
-
-  return { ceiling, floor };
-}
-
-/** The cave walls at world x: `{ ceiling, floor }` in world pixels. */
-export function caveAt(garden, x) {
-  return profile(garden, x);
-}
-
-/** The midpoint between the ceiling and floor at world x. */
-export function caveCenter(garden, x) {
-  const { ceiling, floor } = caveAt(garden, x);
-  return (ceiling + floor) / 2;
-}
-
-// ------------------------------------------------------------------- layout ---
-
-const ISLAND_CLEARANCE = 26; // rock-to-wall breathing room for boulders
-const PICK_CLEARANCE = 14; // pickup-to-wall breathing room
-const ISLAND_PAD = 10; // extra gap between a pickup and a boulder
-const SEED_RADIUS = 18;
-const OIL_RADIUS = 16;
-const MOTE_RADIUS = 12;
+import { GARDENS, TAU, clamp, hash, lerp, mulberry32, smooth } from './gardens.js';
 
 /**
  * One garden's deterministic layout. All positions are in world pixels.
@@ -378,3 +263,117 @@ export class World {
     return list;
   }
 }
+
+/** The game's fixed design resolution, in pixels. */
+export const VIEW_W = 1280;
+export const VIEW_H = 720;
+
+// --------------------------------------------------------------------- cave ---
+
+const CEILING_BASE = 158;
+const CEILING_WAVES = [
+  [50, 0.0022],
+  [27, 0.0061],
+  [13, 0.0137],
+];
+const FLOOR_BASE = 566;
+const FLOOR_WAVES = [
+  [40, 0.0018],
+  [24, 0.0053],
+  [11, 0.0111],
+];
+
+const CEILING_MIN = 78;
+const CEILING_MAX = 245;
+const FLOOR_MIN = 470;
+const FLOOR_MAX = 646;
+const MIN_CORRIDOR = 292;
+
+const ENTRY_LENGTH = 230;
+const EXIT_LENGTH = 300;
+const ENTRY_CEILING = 112;
+const ENTRY_FLOOR = 608;
+
+// Phase sets are expensive to derive on every caveAt() call (the renderer calls
+// it hundreds of times per frame), so cache them by seed.
+const phaseCache = new Map();
+
+function phasesFor(seed) {
+  let cached = phaseCache.get(seed);
+  if (cached) return cached;
+
+  const ceiling = CEILING_WAVES.map((wave, i) => ({
+    amp: wave[0],
+    freq: wave[1],
+    phase: hash(seed * 131 + i * 17 + 3) * TAU,
+  }));
+  const floor = FLOOR_WAVES.map((wave, i) => ({
+    amp: wave[0],
+    freq: wave[1],
+    phase: hash(seed * 197 + i * 23 + 7) * TAU,
+  }));
+
+  cached = { ceiling, floor };
+  phaseCache.set(seed, cached);
+  return cached;
+}
+
+function profile(garden, x) {
+  const phases = phasesFor(garden.seed);
+
+  let ceiling = CEILING_BASE;
+  for (const wave of phases.ceiling) {
+    ceiling += wave.amp * Math.sin(x * wave.freq + wave.phase);
+  }
+
+  let floor = FLOOR_BASE;
+  for (const wave of phases.floor) {
+    floor += wave.amp * Math.sin(x * wave.freq + wave.phase);
+  }
+
+  ceiling = clamp(ceiling, CEILING_MIN, CEILING_MAX);
+  floor = clamp(floor, FLOOR_MIN, FLOOR_MAX);
+
+  // Keep the flyable corridor wide enough even in the narrowest pinch.
+  if (floor - ceiling < MIN_CORRIDOR) {
+    const middle = (ceiling + floor) / 2;
+    ceiling = middle - MIN_CORRIDOR / 2;
+    floor = middle + MIN_CORRIDOR / 2;
+  }
+
+  // The first and last stretches open into calm antechambers. smooth() clamps
+  // its input, so the profile also stays sensible for world x outside 0..length.
+  const entry = 1 - smooth(x / ENTRY_LENGTH);
+  if (entry > 0) {
+    ceiling = lerp(ceiling, ENTRY_CEILING, entry);
+    floor = lerp(floor, ENTRY_FLOOR, entry);
+  }
+
+  const leave = smooth((x - (garden.length - EXIT_LENGTH)) / EXIT_LENGTH);
+  if (leave > 0) {
+    ceiling = lerp(ceiling, ENTRY_CEILING, leave);
+    floor = lerp(floor, ENTRY_FLOOR, leave);
+  }
+
+  return { ceiling, floor };
+}
+
+/** The cave walls at world x: `{ ceiling, floor }` in world pixels. */
+export function caveAt(garden, x) {
+  return profile(garden, x);
+}
+
+/** The midpoint between the ceiling and floor at world x. */
+export function caveCenter(garden, x) {
+  const { ceiling, floor } = caveAt(garden, x);
+  return (ceiling + floor) / 2;
+}
+
+// ------------------------------------------------------------------- layout ---
+
+const ISLAND_CLEARANCE = 26; // rock-to-wall breathing room for boulders
+const PICK_CLEARANCE = 14; // pickup-to-wall breathing room
+const ISLAND_PAD = 10; // extra gap between a pickup and a boulder
+const SEED_RADIUS = 18;
+const OIL_RADIUS = 16;
+const MOTE_RADIUS = 12;

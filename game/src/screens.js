@@ -1,30 +1,10 @@
 // Every full-screen card and menu: the title, the garden-select map, the pause
 // card and the three end screens (garden cleared, all gardens awake, lantern
 // out). These are plain functions so the Hud class only owns the flight HUD.
-import { TAU, formatTime } from './utils.js';
+import { TAU, formatTime } from './gardens.js';
 import { VIEW_W, VIEW_H } from './world.js';
 import { GARDENS } from './gardens.js';
 import { isGardenUnlocked } from './save.js';
-
-export const SERIF = 'Georgia, "Iowan Old Style", "Palatino Linotype", serif';
-export const SANS = '"Trebuchet MS", "Segoe UI", system-ui, sans-serif';
-
-export function spacing(ctx, text, x, y, gap, align = 'center') {
-  const chars = [...text];
-  const widths = chars.map((c) => ctx.measureText(c).width);
-  const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
-  let cursor = align === 'center' ? x - total / 2 : align === 'right' ? x - total : x;
-  for (let i = 0; i < chars.length; i++) {
-    ctx.fillText(chars[i], cursor + widths[i] / 2, y);
-    cursor += widths[i] + gap;
-  }
-  return total;
-}
-
-export function trackedWidth(ctx, text, gap) {
-  const chars = [...text];
-  return chars.reduce((sum, c) => sum + ctx.measureText(c).width, 0) + gap * (chars.length - 1);
-}
 
 // ---------------------------------------------------------------- title ---
 export function drawTitle(ctx, game) {
@@ -260,7 +240,7 @@ export function drawClear(ctx, game) {
   const pulse = 0.55 + 0.45 * Math.sin(game.time * 2.6);
   ctx.font = `600 17px ${SANS}`;
   ctx.fillStyle = `rgba(255,244,214,${0.5 + pulse * 0.5})`;
-  spacing(ctx, game.world.index >= 2 ? 'PRESS  ENTER  TO  WAKE  THEM  ALL' : 'PRESS  ENTER  TO  FLY  ON', VIEW_W / 2, 484, 3.4);
+  spacing(ctx, game.world.index >= GARDENS.length - 1 ? 'PRESS  ENTER  TO  WAKE  THEM  ALL' : 'PRESS  ENTER  TO  FLY  ON', VIEW_W / 2, 484, 3.4);
   ctx.restore();
 }
 
@@ -466,7 +446,7 @@ export function drawGameOver(ctx, game) {
   ctx.fillText(game.reason, VIEW_W / 2, 300);
 
   statRow(ctx, VIEW_W / 2, 360, [
-    ['GARDEN', `${game.world.index + 1} / 3`],
+    ['GARDEN', `${game.world.index + 1} / ${GARDENS.length}`],
     ['SCORE', game.player.score.toLocaleString('en-US')],
     ['BEST', Math.max(game.best, game.player.score).toLocaleString('en-US')],
   ], 16, 32);
@@ -502,43 +482,6 @@ export function drawPause(ctx, game) {
 }
 
 // --------------------------------------------------------- garden select ---
-
-const CARD_W = 272;
-const CARD_H = 300;
-const CARD_Y = 216;
-const CARD_GAP = 24;
-const CARD_START_X = 60;
-
-/** Where the four garden cards sit on the select screen. */
-export function gardenCardRect(index) {
-  return {
-    x: CARD_START_X + index * (CARD_W + CARD_GAP),
-    y: CARD_Y,
-    w: CARD_W,
-    h: CARD_H,
-  };
-}
-
-function lockGlyph(ctx, x, y) {
-  ctx.save();
-  ctx.strokeStyle = 'rgba(255,226,168,0.8)';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(x, y - 18, 16, Math.PI, 0);
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(255,226,168,0.14)';
-  roundRect(ctx, x - 22, y - 18, 44, 38, 8);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,226,168,0.85)';
-  ctx.lineWidth = 2;
-  roundRect(ctx, x - 22, y - 18, 44, 38, 8);
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(255,226,168,0.9)';
-  ctx.beginPath();
-  ctx.arc(x, y + 2, 4, 0, TAU);
-  ctx.fill();
-  ctx.restore();
-}
 
 export function drawGardenSelect(ctx, game) {
   const t = game.time;
@@ -684,6 +627,55 @@ export function drawGardenSelect(ctx, game) {
   ctx.restore();
 }
 
+/** Where the four garden cards sit on the select screen. */
+export function gardenCardRect(index) {
+  return {
+    x: CARD_START_X + index * (CARD_W + CARD_GAP),
+    y: CARD_Y,
+    w: CARD_W,
+    h: CARD_H,
+  };
+}
+
+// One run's small scoreboard. The Game keeps a single instance per run and
+// replaces it with a new tally, so these helpers stay pure and allocation-light.
+
+export function newRunStats() {
+  return {
+    seeds: 0,
+    motes: 0,
+    pulses: 0,
+    bats: 0,
+    gardens: 0,
+    startedAt: 0,
+  };
+}
+
+/** Raise one counter by `amount`, returning a new stats object. */
+export function tally(stats, key, amount = 1) {
+  if (!stats) return stats;
+  const current = Number.isFinite(stats[key]) ? stats[key] : 0;
+  const delta = Number.isFinite(amount) ? amount : 0;
+  return { ...stats, [key]: current + delta };
+}
+
+export function spacing(ctx, text, x, y, gap, align = 'center') {
+  const chars = [...text];
+  const widths = chars.map((c) => ctx.measureText(c).width);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
+  let cursor = align === 'center' ? x - total / 2 : align === 'right' ? x - total : x;
+  for (let i = 0; i < chars.length; i++) {
+    ctx.fillText(chars[i], cursor + widths[i] / 2, y);
+    cursor += widths[i] + gap;
+  }
+  return total;
+}
+
+export function trackedWidth(ctx, text, gap) {
+  const chars = [...text];
+  return chars.reduce((sum, c) => sum + ctx.measureText(c).width, 0) + gap * (chars.length - 1);
+}
+
 // --------------------------------------------------------------- pieces ---
 export function plate(ctx, x, y, w, h, r = 12) {
   ctx.fillStyle = 'rgba(4,12,18,0.55)';
@@ -810,4 +802,34 @@ export function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, rr);
   ctx.arcTo(x, y, x + w, y, rr);
   ctx.closePath();
+}
+
+export const SERIF = 'Georgia, "Iowan Old Style", "Palatino Linotype", serif';
+export const SANS = '"Trebuchet MS", "Segoe UI", system-ui, sans-serif';
+
+const CARD_W = 272;
+const CARD_H = 300;
+const CARD_Y = 216;
+const CARD_GAP = 24;
+const CARD_START_X = 60;
+
+function lockGlyph(ctx, x, y) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,226,168,0.8)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(x, y - 18, 16, Math.PI, 0);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,226,168,0.14)';
+  roundRect(ctx, x - 22, y - 18, 44, 38, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,226,168,0.85)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, x - 22, y - 18, 44, 38, 8);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,226,168,0.9)';
+  ctx.beginPath();
+  ctx.arc(x, y + 2, 4, 0, TAU);
+  ctx.fill();
+  ctx.restore();
 }
