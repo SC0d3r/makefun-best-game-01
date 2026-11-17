@@ -89,10 +89,17 @@ export class Hud {
     ctx.textAlign = 'left';
     ctx.font = `600 24px ${SANS}`;
     ctx.fillStyle = 'rgba(255,226,168,0.9)';
-    spacing(ctx, `SEEDS ${got}`, seedX + 20, 44, 1.8, 'left');
-    ctx.font = `600 13px ${SANS}`;
+    spacing(ctx, `SEEDS ${got}/${need}`, seedX + 20, 44, 1.8, 'left');
+    ctx.font = `600 15px ${SANS}`;
     ctx.fillStyle = 'rgba(206,230,224,0.72)';
-    spacing(ctx, `GARDEN ${world.index + 1}/${GARDENS.length}`, seedX + 20, 64, 1.6, 'left');
+    spacing(
+      ctx,
+      `SUNSEEDS ${game.sunseeds}  GARDEN ${world.index + 1}/${GARDENS.length}`,
+      seedX + 20,
+      64,
+      1.6,
+      'left',
+    );
     const pipGap = 24;
     const pipCenter = seedX + seedW / 2;
     const pipStart = pipCenter - ((need - 1) * pipGap) / 2;
@@ -152,7 +159,7 @@ export class Hud {
     roundRect(ctx, rulesX, rulesY, rulesW, rulesH, 18);
     ctx.stroke();
 
-    const winText = 'WIN:  WAKE 3 MOONFLOWERS';
+    const winText = 'WIN:  WAKE THE MOONFLOWER';
     const loseText = 'LOSE:  LANTERN OUT = RUN OVER';
     let ruleSize = 28;
     while (ruleSize > 24) {

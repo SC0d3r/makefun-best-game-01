@@ -147,7 +147,302 @@ export function drawGardenSelect(ctx, game) {
 
   ctx.font = `600 18px ${SANS}`;
   ctx.fillStyle = 'rgba(255,236,200,0.9)';
+
+  // With a draft open the panel owns the screen; the map-only control line and
+  // its footer stay out from under it.
+  if (game.draft) {
+    ctx.restore();
+    drawDraft(ctx, game);
+    return;
+  }
+
   spacing(ctx, 'ARROWS  CHOOSE      ENTER  FLY', VIEW_W / 2, 664, 2.6);
+
+  ctx.restore();
+}
+
+export function drawVictory(ctx, game) {
+  veil(ctx, 0.5);
+  const cx = VIEW_W / 2;
+  const t = game.time;
+
+  // The results card: near opaque, 2 px edge, soft outer shadow.
+  const cardX = 300;
+  const cardY = 96;
+  const cardW = 680;
+  const cardH = 536;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.65)';
+  ctx.shadowBlur = 46;
+  ctx.shadowOffsetY = 18;
+  ctx.fillStyle = 'rgba(4,12,18,0.94)';
+  roundRect(ctx, cardX, cardY, cardW, cardH, 22);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = 'rgba(255,220,150,0.55)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, cardX, cardY, cardW, cardH, 22);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // A little warm bokeh behind the header.
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * TAU + t * 0.1;
+    const r = 118 + Math.sin(t * 0.9 + i) * 10;
+    const x = cx + Math.cos(a) * r * 1.55;
+    const y = 196 + Math.sin(a) * r * 0.52;
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 16);
+    glow.addColorStop(0, 'rgba(255,236,168,0.4)');
+    glow.addColorStop(1, 'rgba(255,210,120,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, 16, 0, TAU);
+    ctx.fill();
+  }
+
+  ctx.font = `700 32px ${SANS}`;
+  ctx.fillStyle = '#fff8e2';
+  ctx.shadowColor = 'rgba(255,208,120,0.55)';
+  ctx.shadowBlur = 24;
+  spacing(ctx, 'RUN COMPLETE', cx, 146, 5);
+  ctx.shadowBlur = 0;
+
+  ctx.font = `700 84px ${SERIF}`;
+  const gold = ctx.createLinearGradient(0, 174, 0, 254);
+  gold.addColorStop(0, '#fffbe8');
+  gold.addColorStop(1, '#f2c274');
+  ctx.fillStyle = gold;
+  ctx.shadowColor = 'rgba(255,208,120,0.6)';
+  ctx.shadowBlur = 32;
+  spacing(ctx, 'DAWN BREAKS', cx, 214, 2);
+  ctx.shadowBlur = 0;
+
+  ctx.font = `italic 400 22px ${SERIF}`;
+  ctx.fillStyle = 'rgba(230,242,236,0.72)';
+  ctx.fillText('The lantern moth carried the morning through the dark.', cx, 278);
+
+  // Stats card with the score as the one hero number.
+  const statX = 360;
+  const statY = 292;
+  const statW = 560;
+  const statH = 220;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = 28;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = 'rgba(2,7,12,0.91)';
+  roundRect(ctx, statX, statY, statW, statH, 16);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = 'rgba(255,220,150,0.34)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, statX, statY, statW, statH, 16);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.font = `600 16px ${SANS}`;
+  ctx.fillStyle = 'rgba(180,214,208,0.8)';
+  spacing(ctx, 'SCORE', cx, statY + 22, 3);
+  ctx.font = `700 60px ${SANS}`;
+  ctx.fillStyle = '#fff8e2';
+  ctx.shadowColor = 'rgba(255,208,120,0.45)';
+  ctx.shadowBlur = 18;
+  ctx.fillText(game.player.score.toLocaleString('en-US'), cx, statY + 76);
+  ctx.shadowBlur = 0;
+
+  // A compact tally of everything the run gathered, one row per line.
+  const stats = game.stats || {};
+  const rows = [
+    ['SUNSEEDS', `${stats.seeds || 0}`],
+    ['MOTES', `${stats.motes || 0}`],
+    ['GARDENS', `${stats.gardens || 0}/${GARDENS.length}`],
+    ['RUN', `${Math.round(game.elapsed)}s`],
+  ];
+  const rowX = statX + 40;
+  const rowRight = statX + statW - 40;
+  let rowY = statY + 102;
+  for (const [label, value] of rows) {
+    ctx.textAlign = 'left';
+    ctx.font = `600 13px ${SANS}`;
+    ctx.fillStyle = 'rgba(170,200,196,0.7)';
+    ctx.fillText(label, rowX, rowY);
+    ctx.textAlign = 'right';
+    ctx.font = `700 15px ${SANS}`;
+    ctx.fillStyle = '#f6f2e4';
+    ctx.fillText(value, rowRight, rowY);
+    rowY += 23;
+  }
+
+  const timeBestX = [cx - 118, cx + 118];
+  const bestText = game.best > game.player.score ? game.best.toLocaleString('en-US') : 'NEW';
+  ctx.textAlign = 'center';
+  ctx.font = `600 12px ${SANS}`;
+  ctx.fillStyle = 'rgba(180,214,208,0.72)';
+  spacing(ctx, 'TIME', timeBestX[0], statY + 192, 2.4);
+  spacing(ctx, 'BEST', timeBestX[1], statY + 192, 2.4);
+  ctx.font = `700 22px ${SANS}`;
+  ctx.fillStyle = '#f6f2e4';
+  ctx.fillText(formatTime(game.elapsed), timeBestX[0], statY + 210);
+  ctx.fillText(bestText, timeBestX[1], statY + 210);
+
+  // Restart pill with a key glyph, the only prompt on the screen.
+  const pillW = 620;
+  const pillH = 96;
+  const pillX = cx - pillW / 2;
+  const pillY = 520;
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
+  ctx.save();
+  ctx.shadowColor = `rgba(255,205,110,${0.22 + pulse * 0.14})`;
+  ctx.shadowBlur = 30;
+  const pillFill = ctx.createLinearGradient(pillX, 0, pillX + pillW, 0);
+  pillFill.addColorStop(0, 'rgba(255,205,110,0.24)');
+  pillFill.addColorStop(1, 'rgba(255,205,110,0.12)');
+  ctx.fillStyle = pillFill;
+  roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255,222,150,0.8)';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.font = `600 44px ${SANS}`;
+  const label = 'FLY AGAIN';
+  const labelW = ctx.measureText(label).width;
+  const keyW = 44;
+  const gap = 16;
+  const startX = cx - (keyW + gap + labelW) / 2;
+  ctx.fillStyle = 'rgba(255,222,150,0.12)';
+  roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,222,150,0.8)';
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 8);
+  ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.font = `700 26px ${SANS}`;
+  ctx.fillStyle = '#fff4d8';
+  ctx.fillText('R', startX + keyW / 2, pillY + pillH / 2 + 1);
+  ctx.textAlign = 'left';
+  ctx.font = `600 44px ${SANS}`;
+  ctx.fillStyle = '#fff8ec';
+  ctx.fillText(label, startX + keyW + gap, pillY + pillH / 2 + 1);
+
+  ctx.restore();
+}
+
+// ------------------------------------------------------------- the draft ---
+
+/**
+ * The three-card upgrade draft, drawn over the still-visible garden map. This
+ * is presentation only: buyUpgrade() and skipDraft() in main.js own the state.
+ */
+export function drawDraft(ctx, game) {
+  const draft = game.draft;
+  const offers = draft.offers || [];
+  const sunseeds = Number.isFinite(game.sunseeds) ? game.sunseeds : 0;
+
+  ctx.fillStyle = 'rgba(1,4,9,0.82)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = `600 26px ${SANS}`;
+  ctx.fillStyle = 'rgba(180,214,208,0.7)';
+  spacing(ctx, 'GARDEN CLEARED', VIEW_W / 2, 78, 5.2);
+
+  const headline = ctx.createLinearGradient(0, 104, 0, 168);
+  headline.addColorStop(0, '#fff8e2');
+  headline.addColorStop(0.55, '#ffe3a8');
+  headline.addColorStop(1, '#f3b967');
+  ctx.font = `700 64px ${SERIF}`;
+  ctx.fillStyle = headline;
+  ctx.shadowColor = 'rgba(255,208,120,0.5)';
+  ctx.shadowBlur = 26;
+  spacing(ctx, 'CHOOSE ONE', VIEW_W / 2, 136, 3);
+  ctx.shadowBlur = 0;
+
+  const cardW = 380;
+  const cardH = 300;
+  const cardY = 200;
+  const cardX = [55, 450, 845];
+
+  for (let i = 0; i < offers.length && i < cardX.length; i++) {
+    const offer = offers[i];
+    const cardLeft = cardX[i];
+    const selected = i === draft.index;
+    const affordable = sunseeds >= offer.cost;
+    const cx = cardLeft + cardW / 2;
+
+    ctx.save();
+    if (!affordable) ctx.globalAlpha = 0.45;
+
+    ctx.fillStyle = 'rgba(5,14,20,0.92)';
+    roundRect(ctx, cardLeft, cardY, cardW, cardH, 18);
+    ctx.fill();
+
+    ctx.lineWidth = selected ? 4 : 1.5;
+    ctx.strokeStyle = selected ? '#ffd685' : 'rgba(255,226,150,0.35)';
+    if (selected) {
+      ctx.shadowColor = 'rgba(255,208,120,0.7)';
+      ctx.shadowBlur = 24;
+    }
+    roundRect(ctx, cardLeft, cardY, cardW, cardH, 18);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    let nameSize = 60;
+    ctx.font = `700 ${nameSize}px ${SERIF}`;
+    while (nameSize > 44 && ctx.measureText(offer.name).width > cardW - 32) {
+      nameSize -= 2;
+      ctx.font = `700 ${nameSize}px ${SERIF}`;
+    }
+    ctx.fillStyle = '#fdf6e4';
+    ctx.fillText(offer.name, cx, cardY + 78);
+
+    ctx.font = `500 22px ${SANS}`;
+    ctx.fillStyle = 'rgba(216,236,230,0.84)';
+    ctx.fillText(offer.effect, cx, cardY + 150, cardW - 32);
+
+    seedIcon(ctx, cx, cardY + 206, true, '#ffd685');
+
+    ctx.font = `700 40px ${SANS}`;
+    if (affordable) {
+      ctx.fillStyle = '#ffe9ad';
+      ctx.fillText(`COST ${offer.cost}`, cx, cardY + 246);
+    } else {
+      ctx.fillStyle = '#ff9b86';
+      ctx.fillText(`NEED ${offer.cost}`, cx, cardY + 246);
+    }
+
+    ctx.restore();
+  }
+
+  ctx.font = `700 56px ${SERIF}`;
+  ctx.fillStyle = game.draftFlash > 0 ? '#ff9b86' : '#fff1cf';
+  if (game.draftFlash > 0) {
+    ctx.shadowBlur = 0;
+  } else {
+    ctx.shadowColor = 'rgba(255,208,120,0.4)';
+    ctx.shadowBlur = 16;
+  }
+  ctx.fillText(`SUNSEEDS ${sunseeds}`, VIEW_W / 2, 588);
+  ctx.shadowBlur = 0;
+
+  ctx.font = `600 22px ${SANS}`;
+  ctx.fillStyle = 'rgba(255,236,200,0.86)';
+  spacing(ctx, 'LEFT RIGHT CHOOSE    ENTER BUY    ESC SKIP', VIEW_W / 2, 650, 2.2);
 
   ctx.restore();
 }
@@ -387,185 +682,6 @@ export function drawClear(ctx, game) {
   ctx.font = `600 17px ${SANS}`;
   ctx.fillStyle = `rgba(255,244,214,${0.5 + pulse * 0.5})`;
   spacing(ctx, game.world.index >= GARDENS.length - 1 ? 'PRESS  ENTER  TO  WAKE  THEM  ALL' : 'PRESS  ENTER  TO  FLY  ON', VIEW_W / 2, 484, 3.4);
-  ctx.restore();
-}
-
-export function drawVictory(ctx, game) {
-  veil(ctx, 0.5);
-  const cx = VIEW_W / 2;
-  const t = game.time;
-
-  // The results card: near opaque, 2 px edge, soft outer shadow.
-  const cardX = 300;
-  const cardY = 96;
-  const cardW = 680;
-  const cardH = 536;
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.65)';
-  ctx.shadowBlur = 46;
-  ctx.shadowOffsetY = 18;
-  ctx.fillStyle = 'rgba(4,12,18,0.94)';
-  roundRect(ctx, cardX, cardY, cardW, cardH, 22);
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = 'rgba(255,220,150,0.55)';
-  ctx.lineWidth = 2;
-  roundRect(ctx, cardX, cardY, cardW, cardH, 22);
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // A little warm bokeh behind the header.
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * TAU + t * 0.1;
-    const r = 118 + Math.sin(t * 0.9 + i) * 10;
-    const x = cx + Math.cos(a) * r * 1.55;
-    const y = 196 + Math.sin(a) * r * 0.52;
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, 16);
-    glow.addColorStop(0, 'rgba(255,236,168,0.4)');
-    glow.addColorStop(1, 'rgba(255,210,120,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(x, y, 16, 0, TAU);
-    ctx.fill();
-  }
-
-  ctx.font = `700 32px ${SANS}`;
-  ctx.fillStyle = '#fff8e2';
-  ctx.shadowColor = 'rgba(255,208,120,0.55)';
-  ctx.shadowBlur = 24;
-  spacing(ctx, 'RUN COMPLETE', cx, 146, 5);
-  ctx.shadowBlur = 0;
-
-  ctx.font = `700 84px ${SERIF}`;
-  const gold = ctx.createLinearGradient(0, 174, 0, 254);
-  gold.addColorStop(0, '#fffbe8');
-  gold.addColorStop(1, '#f2c274');
-  ctx.fillStyle = gold;
-  ctx.shadowColor = 'rgba(255,208,120,0.6)';
-  ctx.shadowBlur = 32;
-  spacing(ctx, 'DAWN BREAKS', cx, 214, 2);
-  ctx.shadowBlur = 0;
-
-  ctx.font = `italic 400 22px ${SERIF}`;
-  ctx.fillStyle = 'rgba(230,242,236,0.72)';
-  ctx.fillText('The lantern moth carried the morning through the dark.', cx, 278);
-
-  // Stats card with the score as the one hero number.
-  const statX = 360;
-  const statY = 292;
-  const statW = 560;
-  const statH = 220;
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.55)';
-  ctx.shadowBlur = 28;
-  ctx.shadowOffsetY = 8;
-  ctx.fillStyle = 'rgba(2,7,12,0.91)';
-  roundRect(ctx, statX, statY, statW, statH, 16);
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = 'rgba(255,220,150,0.34)';
-  ctx.lineWidth = 2;
-  roundRect(ctx, statX, statY, statW, statH, 16);
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.font = `600 16px ${SANS}`;
-  ctx.fillStyle = 'rgba(180,214,208,0.8)';
-  spacing(ctx, 'SCORE', cx, statY + 22, 3);
-  ctx.font = `700 60px ${SANS}`;
-  ctx.fillStyle = '#fff8e2';
-  ctx.shadowColor = 'rgba(255,208,120,0.45)';
-  ctx.shadowBlur = 18;
-  ctx.fillText(game.player.score.toLocaleString('en-US'), cx, statY + 76);
-  ctx.shadowBlur = 0;
-
-  // A compact tally of everything the run gathered, one row per line.
-  const stats = game.stats || {};
-  const rows = [
-    ['SUNSEEDS', `${stats.seeds || 0}`],
-    ['MOTES', `${stats.motes || 0}`],
-    ['GARDENS', `${stats.gardens || 0}/${GARDENS.length}`],
-    ['RUN', `${Math.round(game.elapsed)}s`],
-  ];
-  const rowX = statX + 40;
-  const rowRight = statX + statW - 40;
-  let rowY = statY + 102;
-  for (const [label, value] of rows) {
-    ctx.textAlign = 'left';
-    ctx.font = `600 13px ${SANS}`;
-    ctx.fillStyle = 'rgba(170,200,196,0.7)';
-    ctx.fillText(label, rowX, rowY);
-    ctx.textAlign = 'right';
-    ctx.font = `700 15px ${SANS}`;
-    ctx.fillStyle = '#f6f2e4';
-    ctx.fillText(value, rowRight, rowY);
-    rowY += 23;
-  }
-
-  const timeBestX = [cx - 118, cx + 118];
-  const bestText = game.best > game.player.score ? game.best.toLocaleString('en-US') : 'NEW';
-  ctx.textAlign = 'center';
-  ctx.font = `600 12px ${SANS}`;
-  ctx.fillStyle = 'rgba(180,214,208,0.72)';
-  spacing(ctx, 'TIME', timeBestX[0], statY + 192, 2.4);
-  spacing(ctx, 'BEST', timeBestX[1], statY + 192, 2.4);
-  ctx.font = `700 22px ${SANS}`;
-  ctx.fillStyle = '#f6f2e4';
-  ctx.fillText(formatTime(game.elapsed), timeBestX[0], statY + 210);
-  ctx.fillText(bestText, timeBestX[1], statY + 210);
-
-  // Restart pill with a key glyph, the only prompt on the screen.
-  const pillW = 620;
-  const pillH = 96;
-  const pillX = cx - pillW / 2;
-  const pillY = 520;
-  const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
-  ctx.save();
-  ctx.shadowColor = `rgba(255,205,110,${0.22 + pulse * 0.14})`;
-  ctx.shadowBlur = 30;
-  const pillFill = ctx.createLinearGradient(pillX, 0, pillX + pillW, 0);
-  pillFill.addColorStop(0, 'rgba(255,205,110,0.24)');
-  pillFill.addColorStop(1, 'rgba(255,205,110,0.12)');
-  ctx.fillStyle = pillFill;
-  roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(255,222,150,0.8)';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.font = `600 44px ${SANS}`;
-  const label = 'FLY AGAIN';
-  const labelW = ctx.measureText(label).width;
-  const keyW = 44;
-  const gap = 16;
-  const startX = cx - (keyW + gap + labelW) / 2;
-  ctx.fillStyle = 'rgba(255,222,150,0.12)';
-  roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 8);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,222,150,0.8)';
-  ctx.lineWidth = 1.2;
-  roundRect(ctx, startX, pillY + (pillH - keyW) / 2, keyW, keyW, 8);
-  ctx.stroke();
-  ctx.textAlign = 'center';
-  ctx.font = `700 26px ${SANS}`;
-  ctx.fillStyle = '#fff4d8';
-  ctx.fillText('R', startX + keyW / 2, pillY + pillH / 2 + 1);
-  ctx.textAlign = 'left';
-  ctx.font = `600 44px ${SANS}`;
-  ctx.fillStyle = '#fff8ec';
-  ctx.fillText(label, startX + keyW + gap, pillY + pillH / 2 + 1);
-
   ctx.restore();
 }
 

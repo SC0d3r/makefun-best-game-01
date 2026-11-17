@@ -9,7 +9,7 @@
 
 import { loadSave, writeSave, recordRun, isGardenUnlocked } from './save.js';
 import { newRunStats, tally, gardenCardRect } from './screens.js';
-import { clamp, formatTime, GARDENS } from './gardens.js';
+import { clamp, formatTime, GARDENS, mulberry32 } from './gardens.js';
 import { World, caveCenter, VIEW_W, VIEW_H } from './world.js';
 import { Player } from './player.js';
 import { Hud, Audio } from './hud.js';
@@ -50,9 +50,13 @@ export class Game {
     this.committedSeeds = 0;
     this.committedMotes = 0;
     this.campaign = false;
+    this.sunseeds = 0;
+    this.upgrades = {};
+    this.draft = null;
+    this.draftFlash = 0;
 
     this.world = new World(0);
-    this.player = new Player(this.world);
+    this.player = new Player(this.world, this.upgrades);
     this.cam = { x: 0, y: 0 };
     this.bats = [];
     this.audioPrimed = false;
@@ -86,8 +90,12 @@ export class Game {
     this.selectedGarden = garden;
     this.stats = newRunStats();
     this.stats.startedAt = performance.now();
+    this.sunseeds = 0;
+    this.upgrades = {};
+    this.draft = null;
+    this.draftFlash = 0;
     this.world = new World(garden);
-    this.player = new Player(this.world);
+    this.player = new Player(this.world, this.upgrades);
     this.spawnBats();
     this.particles.clear();
     this.popups = [];
@@ -180,13 +188,12 @@ export class Game {
     this.campaign = true;
     const hearts = this.player.hearts;
     const oil = this.player.oil;
-    const maxHearts = this.player.maxHearts;
 
     this.world = new World(index);
-    this.player = new Player(this.world);
+    this.player = new Player(this.world, this.upgrades);
     this.player.score = score;
-    this.player.hearts = Math.min(maxHearts, Math.max(1, hearts));
-    this.player.oil = Math.max(70, oil);
+    this.player.hearts = Math.min(this.player.maxHearts, Math.max(1, hearts));
+    this.player.oil = Math.min(this.player.maxOil, Math.max(70, oil));
     this.player.seeds = 0;
 
     this.spawnBats();
@@ -205,7 +212,11 @@ export class Game {
   /** Wrap every World bat description in the movement creature module. */
   spawnBats() {
     const garden = this.world.garden;
-    this.bats = this.world.bats.map((data, index) => new Bat(garden, data, index));
+    this.bats = this.world.bats.map((data, index) => {
+      const bat = new Bat(garden, data, index);
+      bat.vision *= Math.max(0.35, 1 - 0.25 * (this.upgrades.QUIET_WINGS || 0));
+      return bat;
+    });
     return this.bats;
   }
 
@@ -233,9 +244,50 @@ export class Game {
     } else {
       this.campaign = true;
       this.selectedGarden = this.world.index + 1;
+      this.draft = this.makeDraft();
       this.openGardenSelect();
       this.setStatus(`${this.world.garden.name} is awake. Choose the next garden.`);
     }
+  }
+
+  /** Three distinct upgrades to choose from after a clear, deterministically. */
+  makeDraft() {
+    const rng = mulberry32(
+      1000 + this.world.index * 97 + (this.save.clears || 0) * 13 + this.sunseeds,
+    );
+    const pool = [0, 1, 2, 3, 4, 5, 6, 7];
+    const offers = [];
+    for (let i = 0; i < 3; i++) {
+      const pick = Math.floor(rng() * pool.length);
+      const upgrade = UPGRADES[pool[pick]];
+      pool.splice(pick, 1);
+      offers.push({ ...upgrade });
+    }
+    return { index: 0, offers };
+  }
+
+  /** Spend sunseeds on the highlighted card, then return to the map. */
+  buyUpgrade() {
+    if (!this.draft) return;
+    const offer = this.draft.offers[this.draft.index] || this.draft.offers[0];
+    if (this.sunseeds < offer.cost) {
+      this.draftFlash = 0.5;
+      return;
+    }
+    this.sunseeds -= offer.cost;
+    this.upgrades[offer.id] = (this.upgrades[offer.id] || 0) + 1;
+    this.audio.seed();
+    this.particles.burst(this.player.x, this.player.y, 18, '#ffd685', 130, 0.7, 3);
+    this.draft = null;
+    this.selectedGarden = this.world.index + 1;
+    this.openGardenSelect();
+  }
+
+  /** Leave the draft without buying anything and return to the map. */
+  skipDraft() {
+    this.draft = null;
+    this.selectedGarden = this.world.index + 1;
+    this.openGardenSelect();
   }
 
   /** The last moonflower woke: close the run with a final bonus. */
@@ -362,6 +414,21 @@ export class Game {
         }
         break;
       case 'select':
+        if (this.draft) {
+          const offers = this.draft.offers.length;
+          if (input.hit('ArrowLeft') || input.hit('KeyA')) {
+            this.draft.index = (this.draft.index + offers - 1) % offers;
+          }
+          if (input.hit('ArrowRight') || input.hit('KeyD')) {
+            this.draft.index = (this.draft.index + 1) % offers;
+          }
+          if (input.hit('Enter') || input.hit('Space')) {
+            input.pressed.delete('Space');
+            this.buyUpgrade();
+          }
+          if (input.hit('Escape')) this.skipDraft();
+          break;
+        }
         if (input.hit('ArrowLeft') || input.hit('KeyA')) this.moveSelection(-1);
         if (input.hit('ArrowRight') || input.hit('KeyD')) this.moveSelection(1);
         if (input.hit('Enter') || input.hit('Space')) {
@@ -451,9 +518,14 @@ export class Game {
 
     for (const seed of this.world.seeds) {
       if (seed.taken) continue;
-      if (Math.hypot(player.x - seed.x, player.y - seed.y) >= seed.r + reach + 4) continue;
+      if (
+        Math.hypot(player.x - seed.x, player.y - seed.y) >=
+        seed.r + reach + 4 + player.pickupBonus
+      )
+        continue;
       seed.taken = true;
       player.seeds += 1;
+      this.sunseeds += 1;
       player.score += 250;
       this.stats = tally(this.stats, 'seeds');
       this.audio.seed();
@@ -479,12 +551,12 @@ export class Game {
       mote.x += (player.x - mote.x) * 0.06;
       mote.y += (player.y - mote.y) * 0.06;
       mote.taken = true;
-      player.score += 20;
+      player.score += player.moteValue;
       this.motes += 1;
       this.stats = tally(this.stats, 'motes');
       this.audio.mote();
       this.particles.burst(mote.x, mote.y, 6, '#fff2c0', 62, 0.44, 2);
-      this.addPopup('+20', mote.x, mote.y - 16, '#fff6c8');
+      this.addPopup(`+${player.moteValue}`, mote.x, mote.y - 16, '#fff6c8');
     }
   }
 
@@ -581,6 +653,7 @@ export class Game {
     this.updatePopups(dt);
     this.shake = Math.max(0, this.shake - 26 * dt);
     this.flash = Math.max(0, this.flash - 1.6 * dt);
+    this.draftFlash = Math.max(0, (this.draftFlash || 0) - dt);
   }
 
   // ----------------------------------------------------------------- frame ---
@@ -645,6 +718,20 @@ export class Game {
       this.best = Number.isFinite(this.save.best) ? this.save.best : 0;
     }
 
+    if (Number.isFinite(shot.sunseeds)) this.sunseeds = shot.sunseeds;
+    if (shot.draft) {
+      this.draft = {
+        index: shot.draft.index || 0,
+        offers: shot.draft.offers.map((offer) => ({ ...offer })),
+      };
+    } else {
+      this.draft = null;
+    }
+    this.draftFlash = 0;
+    if (shot.state === 'select' && Number.isInteger(shot.garden)) {
+      this.world = new World(shot.garden);
+    }
+
     if (shot.state !== 'select') {
       this.startRun(shot.garden);
       for (let i = 0; i < 24; i++) this.step(1 / 60);
@@ -666,7 +753,11 @@ export class Game {
     stats.seeds = Number.isFinite(shot.seeds) ? shot.seeds : 0;
     stats.motes = Number.isFinite(shot.motes) ? shot.motes : 0;
     stats.gardens =
-      shot.state === 'victory' ? 3 : shot.state === 'clear' ? this.world.index + 1 : 0;
+      shot.state === 'victory'
+        ? GARDENS.length
+        : shot.state === 'clear'
+          ? this.world.index + 1
+          : 0;
     stats.startedAt = performance.now() - this.elapsed * 1000;
     this.stats = stats;
 
@@ -813,6 +904,19 @@ const MAX_FRAME = 0.05;
 const MAX_STEPS = 8;
 const POPUP_LIFE = 1.1;
 
+// The eight spendable upgrades. Each id is read by player.js and the bat spawner
+// so a purchase changes the next garden's flight rather than a label.
+const UPGRADES = Object.freeze([
+  Object.freeze({ id: 'WIDE_GLOW', name: 'WIDE GLOW', effect: 'LANTERN PULSE +25%', cost: 3 }),
+  Object.freeze({ id: 'OIL_LEES', name: 'OIL LEES', effect: 'MAX OIL +25', cost: 2 }),
+  Object.freeze({ id: 'SECOND_WICK', name: 'SECOND WICK', effect: 'AN EXTRA HEART', cost: 4 }),
+  Object.freeze({ id: 'QUIET_WINGS', name: 'QUIET WINGS', effect: 'BATS NOTICE LATER', cost: 3 }),
+  Object.freeze({ id: 'SWIFT_MOTH', name: 'SWIFT MOTH', effect: 'FLY 10% FASTER', cost: 2 }),
+  Object.freeze({ id: 'SEED_SENSE', name: 'SEED SENSE', effect: 'SEED REACH +8', cost: 2 }),
+  Object.freeze({ id: 'SOFT_LIGHT', name: 'SOFT LIGHT', effect: 'PULSE COSTS 30% LESS', cost: 3 }),
+  Object.freeze({ id: 'DOUBLE_MOTE', name: 'DOUBLE MOTE', effect: 'MOTES WORTH 40', cost: 2 }),
+]);
+
 // Reused by the preset trail so the screenshot helpers do not allocate options.
 const TRAIL_OPTIONS = Object.freeze({
   drag: 2.6,
@@ -847,6 +951,30 @@ const SHOT_PRESETS = {
       cleared: [true, true, false, false],
     },
     selectedGarden: 2,
+  },
+  draft: {
+    garden: 1,
+    state: 'select',
+    time: 1.6,
+    save: {
+      best: 10240,
+      runs: 12,
+      clears: 2,
+      seeds: 31,
+      motes: 96,
+      bests: [3720, 4460, 0, 0],
+      cleared: [true, true, false, false],
+    },
+    selectedGarden: 2,
+    sunseeds: 6,
+    draft: {
+      index: 0,
+      offers: [
+        { id: 'WIDE_GLOW', name: 'WIDE GLOW', effect: 'LANTERN PULSE +25%', cost: 3 },
+        { id: 'SECOND_WICK', name: 'SECOND WICK', effect: 'AN EXTRA HEART', cost: 4 },
+        { id: 'SEED_SENSE', name: 'SEED SENSE', effect: 'SEED REACH +8', cost: 2 },
+      ],
+    },
   },
   play: {
     garden: 0,

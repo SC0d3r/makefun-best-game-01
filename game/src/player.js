@@ -9,7 +9,8 @@ import { TAU, clamp, easeOut } from './gardens.js';
 import { caveAt } from './world.js';
 
 export class Player {
-  constructor(world) {
+  constructor(world, upgrades) {
+    const levels = upgrades || {};
     const spawn = (world && world.spawn) || { x: 0, y: 0 };
 
     this.x = Number.isFinite(spawn.x) ? spawn.x : 0;
@@ -18,10 +19,15 @@ export class Player {
     this.vy = 0;
 
     this.r = 13;
-    this.hearts = 3;
-    this.maxHearts = 3;
-    this.oil = 100;
-    this.maxOil = 100;
+    this.maxOil = 100 + 25 * (levels.OIL_LEES || 0);
+    this.oil = this.maxOil;
+    this.maxHearts = 3 + (levels.SECOND_WICK || 0);
+    this.hearts = this.maxHearts;
+    this.speedMax = MAX_SPEED * (1 + 0.1 * (levels.SWIFT_MOTH || 0));
+    this.pulseRadius = PULSE_RADIUS * (1 + 0.25 * (levels.WIDE_GLOW || 0));
+    this.pulseCost = Math.max(4, Math.round(PULSE_COST * (1 - 0.3 * (levels.SOFT_LIGHT || 0))));
+    this.pickupBonus = 8 * (levels.SEED_SENSE || 0);
+    this.moteValue = 20 * (1 + (levels.DOUBLE_MOTE || 0));
     this.seeds = 0;
     this.score = 0;
     this.invuln = 0;
@@ -66,11 +72,11 @@ export class Player {
     this.vy *= damp;
 
     let speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-    if (speed > MAX_SPEED) {
-      const scale = MAX_SPEED / speed;
+    if (speed > this.speedMax) {
+      const scale = this.speedMax / speed;
       this.vx *= scale;
       this.vy *= scale;
-      speed = MAX_SPEED;
+      speed = this.speedMax;
     }
 
     this.x += this.vx * step;
@@ -103,9 +109,9 @@ export class Player {
       input &&
       input.hit('Space') &&
       this.cooldown <= 0 &&
-      this.oil >= PULSE_COST
+      this.oil >= this.pulseCost
     ) {
-      this.oil = Math.max(0, this.oil - PULSE_COST);
+      this.oil = Math.max(0, this.oil - this.pulseCost);
       this.pulse = PULSE_TIME;
       this.cooldown = PULSE_COOLDOWN;
 
@@ -116,7 +122,7 @@ export class Player {
         for (const bat of bats) {
           const reachX = bat.x - this.x;
           const reachY = bat.y - this.y;
-          if (reachX * reachX + reachY * reachY <= PULSE_RADIUS * PULSE_RADIUS) {
+          if (reachX * reachX + reachY * reachY <= this.pulseRadius * this.pulseRadius) {
             bat.frightened = Math.max(Number.isFinite(bat.frightened) ? bat.frightened : 0, 1.6);
             if (game && typeof game.startle === 'function') game.startle();
           }
@@ -411,26 +417,6 @@ export class Player {
   }
 }
 
-const ACCELERATION = 1780;
-const DRAG = 3.7;
-const MAX_SPEED = 330;
-const OIL_DRAIN = 0.8;
-const PULSE_COST = 12;
-const PULSE_TIME = 1.2;
-const PULSE_COOLDOWN = 0.85;
-const PULSE_RADIUS = 290;
-const TRAIL_INTERVAL = 0.055;
-
-// Reused for every trail particle, so flight does not allocate an options bag.
-const TRAIL_OPTIONS = Object.freeze({
-  drag: 2.6,
-  gravity: -6,
-  glow: true,
-  fade: 1.5,
-});
-
-const NO_ISLANDS = [];
-
 /** Clamp a body between the cave walls, bouncing softly off them. */
 function clampToCave(world, body, radius) {
   if (typeof world.clampToCave === 'function') {
@@ -509,3 +495,23 @@ function pushOutOfIslands(world, body, radius, restitution) {
     if (!moved) break;
   }
 }
+
+const ACCELERATION = 1780;
+const DRAG = 3.7;
+const MAX_SPEED = 330;
+const OIL_DRAIN = 0.8;
+const PULSE_COST = 12;
+const PULSE_TIME = 1.2;
+const PULSE_COOLDOWN = 0.85;
+const PULSE_RADIUS = 290;
+const TRAIL_INTERVAL = 0.055;
+
+// Reused for every trail particle, so flight does not allocate an options bag.
+const TRAIL_OPTIONS = Object.freeze({
+  drag: 2.6,
+  gravity: -6,
+  glow: true,
+  fade: 1.5,
+});
+
+const NO_ISLANDS = [];
